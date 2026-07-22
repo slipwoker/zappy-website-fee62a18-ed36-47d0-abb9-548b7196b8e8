@@ -32,7 +32,10 @@ Information about WCAG compliance and accessibility features.
 
 ## How to Contact Us
 
-- (No contact details configured yet.)
+- Email: dandavidcohen1@gamil.com
+- Phone: +972559499173
+- Phone (tel): tel:+972559499173
+- Address: ירושלים
 
 ### Contact form
 - URL: https://example.com
@@ -40,11 +43,11 @@ Information about WCAG compliance and accessibility features.
 - Method: POST
 - Content-Type: application/json
 - Fields:
-  - `name` (text)
-  - `email` (email)
-  - `phone` (tel)
+  - `name` (text, required)
+  - `email` (email, required)
+  - `phone` (tel, required)
   - `message` (text)
-  - `privacy_consent` (checkbox)
+  - `privacy_consent` (checkbox, required)
 
 ---
 
