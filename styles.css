@@ -5151,6 +5151,16 @@ div[id*="mic-access-tool-box"] button[class*="reset"] * {
 ._access-icon {
   display: flex !important;
 }
+
+@media (max-width: 768px) {
+#hero section[data-hero-type*="fullscreen"] {
+  padding: 0px clamp(1rem, 5vw, 1.5rem) 10px !important;
+}
+
+#hero .hero-divider-wrapper {
+  height: 30px !important;
+}
+}
 /* mobile-submenu-overflow-fix */
 @media (max-width: 768px) {
   .navbar .sub-menu.mobile-expanded,
