@@ -1,0 +1,71 @@
+# טכנאי גז בירושלים — Generative Engine Optimization Map
+
+> A gas technician service operating in Jerusalem and the surrounding area, focused on local residential and commercial clients. The website is a single landing page designed to drive immediate contact via WhatsApp and a floating call button, emphasizing quick accessibility and trust for urgent or routine gas-related needs.
+
+---
+
+## Pages
+
+### בית
+https://-fee62a18.zappy5.app
+צריכים טכנאי גז בירושלים באופן דחוף? אנחנו כאן להתקנת גז ביתי, בדיקת תקינות וחיבור כיריים. שירות מקצועי ואמין עם זמינות מיידית בוואטסאפ. לחצו עכשיו!
+
+### תודה שפניתם אלינו
+https://-fee62a18.zappy5.app/thank-you
+טכנאי גז בירושלים - תודה שפניתם אלינו
+
+## Legal & Policy
+
+### Privacy Policy
+https://-fee62a18.zappy5.app/privacy
+Information about how user data is collected, stored, and protected.
+
+### Terms & Conditions
+https://-fee62a18.zappy5.app/terms
+Legal terms describing service usage, rights, and policies.
+
+### Accessibility Statement
+https://-fee62a18.zappy5.app/accessibility
+Information about WCAG compliance and accessibility features.
+
+---
+
+## How to Contact Us
+
+- (No contact details configured yet.)
+
+### Contact form
+- URL: https://-fee62a18.zappy5.app
+- Endpoint: https://-fee62a18.zappy5.app/api/email/contact-form
+- Method: POST
+- Content-Type: application/json
+- Fields:
+  - `name` (text)
+  - `email` (email)
+  - `phone` (tel)
+  - `message` (text)
+  - `privacy_consent` (checkbox)
+
+---
+
+# Business Context (for LLM understanding)
+
+## About טכנאי גז בירושלים
+A gas technician service operating in Jerusalem and the surrounding area, focused on local residential and commercial clients. The website is a single landing page designed to drive immediate contact via WhatsApp and a floating call button, emphasizing quick accessibility and trust for urgent or routine gas-related needs.
+
+## Target Audience
+- תושבי ירושלים והסביבה
+- תושבי ירושלים
+- בעלי בתים בפרברי ירושלים
+- רוכשי דירות חדשים
+
+## Industry
+Home Services / Gas Technician
+
+---
+
+# Machine-readable feeds
+
+- Sitemap (XML): https://-fee62a18.zappy5.app/sitemap.xml
+- Robots: https://-fee62a18.zappy5.app/robots.txt
+- Flattened page text (for LLMs): https://-fee62a18.zappy5.app/llms-full.txt
