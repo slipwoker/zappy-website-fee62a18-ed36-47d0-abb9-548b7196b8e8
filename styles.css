@@ -5161,6 +5161,16 @@ div[id*="mic-access-tool-box"] button[class*="reset"] * {
   height: 30px !important;
 }
 }
+
+@media (max-width: 768px) {
+#hero section[data-hero-type*="fullscreen"] {
+  min-height: auto !important;
+}
+}
+
+.index-hero-section .hero-cta-row {
+  margin-bottom: 12px !important;
+}
 /* mobile-submenu-overflow-fix */
 @media (max-width: 768px) {
   .navbar .sub-menu.mobile-expanded,
