@@ -5183,6 +5183,12 @@ div[id*="mic-access-tool-box"] button[class*="reset"] * {
   padding-bottom: 24px !important;
 }
 }
+
+@media (max-width: 768px) {
+#services.index-services-section {
+  padding-top: 16px !important;
+}
+}
 /* mobile-submenu-overflow-fix */
 @media (max-width: 768px) {
   .navbar .sub-menu.mobile-expanded,
