@@ -769,10 +769,10 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
   <nav class="navbar" dir="rtl">
   <!-- Mobile buttons: MUST be direct children of .navbar (outside nav-container) -->
   <button class="mobile-toggle" id="mobileToggle" aria-label="Menu">
-    <svg class="hamburger-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
+    <svg style="display:block !important" class="hamburger-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
       <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
     </svg>
-    <svg class="close-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" style="display: none;">
+    <svg class="close-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" style="display:none !important">
       <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
     </svg>
   </button>
@@ -1255,13 +1255,13 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
   
   <main id="main">
     <section data-band-index="0" id="hero" class="index-hero-section" data-layout-spec="בית-hero" data-hero-treatment="fade-bleed" style="--hero-fade-color: var(--bg-light);" data-hero-type="fullscreen-scrim">
-  <img loading="eager" fetchpriority="high" class="hero-fade-img" data-hero-bg="true" data-placeholder="index-hero-image-1" data-context="A uniformed certified gas technician inspecting a clean residential kitchen gas connection in Jerusalem. Natural daylight, calm expression, gas hose and meter detail visible. Subject positioned on the left side of the frame, leaving the right side empty for a text panel overlay." width="1200" height="600" src="/assets/site-image-index-hero-image-1.webp" alt="טכנאי גז מוסמך בודק חיבור גז במטבח בירושלים" data-hero-background="true" data-element-type="image" data-element-id="img-1784762321853-k0a6ep8a1" decoding="async">
+  <img loading="eager" fetchpriority="high" class="hero-fade-img" data-hero-bg="true" data-placeholder="index-hero-image-1" data-context="A uniformed certified gas technician inspecting a clean residential kitchen gas connection in Jerusalem. Natural daylight, calm expression, gas hose and meter detail visible. Subject positioned on the left side of the frame, leaving the right side empty for a text panel overlay." width="1200" height="600" src="/assets/site-image-index-hero-image-1.webp" alt="טכנאי גז מוסמך בודק חיבור גז במטבח בירושלים" data-hero-background="true" data-element-type="image" data-element-id="img-1784762321853-k0a6ep8a1" style="position: absolute; object-fit: cover; object-position: 50% 50%; max-width: none; max-height: none; margin: 0; inset: 0; width: 100%; height: 100%" decoding="async">
   
   <div class="hero-fade-content">
     <p><span class="hero-eyebrow">שירות טכנאי גז מוסמך</span>
     </p><h1 class="display-xl">טכנאי גז בירושלים והסביבה – זמין עכשיו</h1>
     <h3 class="hero-support">מענה מהיר ומקצועי לבדיקות, תיקונים, התקנות וכל תקלת גז דחופה</h3>
-    <p style="">טכנאי מוסמך עם ניסיון רב, שירות אדיב ותקשורת ברורה. צרו קשר בוואטסאפ או בטלפון וקבלו שירות מיידי &gt;&gt;&gt; <span style="font-size: 1rem; background-color: initial;">972-559499173+</span></p>
+    <p>טכנאי מוסמך עם ניסיון רב, שירות אדיב ותקשורת ברורה. צרו קשר בוואטסאפ או בטלפון וקבלו שירות מיידי &gt;&gt;&gt; <span style="font-size: 1rem; background-color: initial;">972-559499173+</span></p>
     
     <div class="hero-cta-row">
       
@@ -1279,7 +1279,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
       </div>
       <div class="trust-item">
         <i class="fas fa-clock" data-element-type="icon" data-element-id="icon-1784762321852-u0x2gnrnt" data-icon-type="fontawesome"></i>
-        <span style="">זמינות מיידית 24/6</span>
+        <span>זמינות מיידית 24/6</span>
       </div>
     </div>
   </div>
@@ -1323,7 +1323,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
                         <path d="M22.7 19L13.6 9.9C14.5 7.6 14 4.9 12.1 3C10.1 1 7.1 1 5.1 3C4.1 4 3.6 5.3 3.5 6.7L7.1 10.3L5.6 11.8L2 8.2V12C2 17.5 6.5 22 12 22C15.3 22 18.2 20.4 20.1 17.9L22.7 19ZM12 20C7.6 20 4 16.4 4 12C4 8.3 6.5 5.3 10 4.3V8L12 10L14 8V4.3C17.5 5.3 20 8.3 20 12C20 12.3 20 12.7 19.9 13L16.5 9.6L15.1 11L18.5 14.4C17.3 17.1 14.8 19 12 19C11.5 19 11 18.9 10.5 18.8L12 17.3L10.6 15.9L8.5 18C7.6 17.5 6.9 16.8 6.3 16L8.4 13.9L7 12.5L4.9 14.6C4.4 13.8 4.1 12.9 4 12H8V10H4C4.1 9.1 4.4 8.2 4.9 7.4L7 9.5L8.4 8.1L6.3 6C6.9 5.2 7.6 4.5 8.5 4L10.6 6.1L12 4.7L9.9 2.6C11.2 1.8 12.8 1.8 14.1 2.6L12 4.7L13.4 6.1L15.5 4C16.4 4.5 17.1 5.2 17.7 6L15.6 8.1L17 9.5L19.1 7.4C19.6 8.2 19.9 9.1 20 10H16V12H20C19.9 13.1 19.5 14.1 18.9 15L16.8 12.9L15.4 14.3L17.5 16.4C16.8 17.2 16 17.9 15 18.4L12.9 16.3L11.5 17.7L13.6 19.8C13.1 19.9 12.6 20 12 20Z" fill="currentColor"></path>
                     </svg>
                 </div>
-                <h3 class="index-services-section__card-title">התקנת גז וחיבור מכשירים</h3>
+                <h3 class="index-services-section__card-title">התקנת כיריים גז – 200 ש"ח בלבד</h3>
                 <p class="index-services-section__card-text">התקנה מקצועית של מערכות גז ביתיות, חיבור בטיחותי לכיריים, תנורים, דודי חימום ומדי גז. עבודה מסודרת בהתאם להנחיות היצרן.</p>
                 <div class="index-services-section__card-note">
                     <svg class="index-services-section__check-icon" data-element-type="icon" data-icon-type="svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1339,7 +1339,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
                         <path d="M12 1L3 5V11C3 16.55 6.84 21.74 12 23C17.16 21.74 21 16.55 21 11V5L12 1ZM12 11.99H19C18.47 16.11 15.72 19.78 12 20.93V12H5V6.3L12 3.19V11.99Z" fill="currentColor"></path>
                     </svg>
                 </div>
-                <h3 class="index-services-section__card-title">בדיקת תקינות גז לדירה</h3>
+                <h3 class="index-services-section__card-title">בדיקת בטיחות – 200 ש"ח בלבד</h3>
                 <p class="index-services-section__card-text">בדיקות בטיחות תקופתיות מקיפות לדירות מגורים, בתים פרטיים ועסקים. וידוא עמידה בתקנים מחמירים למניעת סיכונים ושמירה על שקט נפשי.</p>
                 <div class="index-services-section__card-note">
                     <svg class="index-services-section__check-icon" data-element-type="icon" data-icon-type="svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1431,7 +1431,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
     <!-- END Column: Imagery + Certification Tile -->
     <div class="index-benefits-media">
       <div class="index-benefits-image-frame">
-        <div id="zappy-carousel-1784762557487-ont0lr" data-zappy-image-carousel="true" data-zappy-hero-carousel="true" data-interval="4000" class="zappy-carousel-inline" style="position:relative;overflow:hidden;width:352px;max-width:100%;aspect-ratio:1.3333;margin-left:auto;margin-right:auto;"><div class="zappy-carousel-slide is-active" style=";;;opacity:1 !important;pointer-events:auto !important;z-index:1 !important;"><div data-zappy-zoom-wrapper="true" data-element-id="img-1784762321857-rvjdoh1on" data-element-type="image" data-zappy-zoom-wrapper-width-mode="full" style="position: absolute !important; top: 0px !important; left: 0px !important; width: 100% !important; height: 100% !important; max-width: none !important; margin-left: 0px !important; margin-right: 0px !important; display: block !important; z-index: 1 !important; overflow: hidden !important;" data-zappy-zoom-clip="true" data-zappy-wrapper-margins-applied="true"><img loading="lazy" decoding="async" data-placeholder="index-benefits-image-1" data-context="A bright, clean photo of a professional gas technician in a neat uniform, kneeling beside a modern kitchen gas connection, using a digital manometer to test pressure. The kitchen is bright with natural light, showing a safe residential Jerusalem apartment setting. The technician looks focused and trustworthy." width="600" height="400" src="/assets/site-image-index-benefits-image-1.webp" alt="טכנאי גז מוסמך בודק חיבור גז במטבח ביתי בירושלים" class="index-benefits-main-image" data-element-type="image" data-element-id="img-1784762321857-rvjdoh1on" style="object-position: 92% 70%; display: block !important; object-fit: cover !important; margin: 0px !important; left: 0% !important; top: 0% !important; width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important;" data-zappy-zoom="1" fetchpriority="low"></div></div></div>
+        <div id="zappy-carousel-1784762557487-ont0lr" data-zappy-image-carousel="true" data-zappy-hero-carousel="true" data-interval="4000" class="zappy-carousel-inline" style="position:relative;overflow:hidden;width:352px;max-width:100%;aspect-ratio:1.3333;margin-left:auto;margin-right:auto;"><div class="zappy-carousel-slide is-active" style=";;;opacity:1 !important;pointer-events:auto !important;z-index:1 !important;"><div data-zappy-zoom-wrapper="true" data-element-id="img-1784762321857-rvjdoh1on" data-element-type="image" data-zappy-zoom-wrapper-width-mode="full" style="position: absolute; top: 0px !important; left: 0px !important; width: 100%; height: 100%; max-width: none; margin-left: 0px !important; margin-right: 0px !important; display: block !important; z-index: 1 !important; overflow: hidden; inset: 0; max-height: none" data-zappy-zoom-clip="true" data-zappy-wrapper-margins-applied="true"><img loading="lazy" decoding="async" data-placeholder="index-benefits-image-1" data-context="A bright, clean photo of a professional gas technician in a neat uniform, kneeling beside a modern kitchen gas connection, using a digital manometer to test pressure. The kitchen is bright with natural light, showing a safe residential Jerusalem apartment setting. The technician looks focused and trustworthy." width="600" height="400" src="/assets/site-image-index-benefits-image-1.webp" alt="טכנאי גז מוסמך בודק חיבור גז במטבח ביתי בירושלים" class="index-benefits-main-image" data-element-type="image" data-element-id="img-1784762321857-rvjdoh1on" style="object-position: 92% 70%; display: block !important; object-fit: cover; margin: 0; width: 100%; height: 100%; max-width: none; max-height: none; position: absolute; inset: 0" data-zappy-zoom="1" fetchpriority="low"></div></div></div>
         <!-- Certification Document Tile (peeking from bottom-start) -->
         <div class="index-benefits-cert-tile" aria-hidden="true">
           <div class="index-benefits-cert-inner">
@@ -1505,7 +1505,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
           </svg>
         </div>
         <h3 class="index-trust-signals-section-card-title">שירות לבית ולעסק</h3>
-        <p class="index-trust-signals-section-card-text" style="">מתן פתרונות גז מותאמים אישית ללקוחות פרטיים, מסעדות, בתי קפה ומוסדות בירושלים והסביבה בהתאם לדרישות החוק</p>
+        <p class="index-trust-signals-section-card-text">מתן פתרונות גז מותאמים אישית ללקוחות פרטיים, מסעדות, בתי קפה ומוסדות בירושלים והסביבה בהתאם לדרישות החוק</p>
       </div>
       <div class="index-trust-signals-section-card" data-grid-item-index="3">
         <div class="index-trust-signals-section-card-icon">
@@ -1517,6 +1517,17 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
         </div>
         <h3 class="index-trust-signals-section-card-title">זמינות מיידית בוואטסאפ</h3>
         <p class="index-trust-signals-section-card-text">מענה מהיר ואנושי ישירות דרך וואטסאפ או בטלפון, עם הגעה מהירה לכל שכונות ירושלים.</p>
+      </div>
+      <div class="index-trust-signals-section-card" data-grid-item-index="4">
+        <div class="index-trust-signals-section-card-icon">
+          <svg data-element-type="icon" data-icon-type="svg" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="24" cy="24" r="24" fill="#1769E0" fill-opacity="0.12"></circle>
+            <path d="M12 16V20H16V24H20V28H16V32H12V28H8V24H12V20H8V16H12Z" fill="#1769E0"></path>
+            <path d="M24 36H32M24 36V20L28 12L36 20V36M24 36H32" stroke="#1769E0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </div>
+        <h3 class="index-trust-signals-section-card-title">עובד עם כל חברות הגז</h3>
+        <p class="index-trust-signals-section-card-text">עובדים עם כל חברות הגז המובילות בישראל – פזגז, סופרגז, אמריקן גז ועוד. שירות מקצועי ומהיר בכל רחבי ירושלים. <strong>עסק של מילואימניק!</strong></p>
       </div>
     </div>
     <div class="index-trust-signals-section-cta">
@@ -1696,7 +1707,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
                     <p>אנחנו משרתים את ירושלים ואת כל היישובים הסמוכים — ממרכז העיר ועד לשכונות החדשות. בין אם אתם רוכשים דירה חדשה, משפצים את הבית, או צריכים בדיקת תקינות דחופה, אנחנו כאן עם שירות מקצועי, מהיר ואמין. הצוות שלנו מכיר כל פינה באזור, כך שאתם יכולים להיות רגועים שהטכנאי יגיע אליכם בזמן.</p>
                     
                     <!-- Neighborhood Chips Grid -->
-                    <div class="neighborhood-chips-grid" style="">
+                    <div class="neighborhood-chips-grid">
                         <span class="neighborhood-chip">מרכז העיר</span>
                         <span class="neighborhood-chip">רחביה</span>
                         <span class="neighborhood-chip">בית הכרם</span>
@@ -1730,7 +1741,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
     </div>
 </section>
 
-<section data-band-index="6" id="faq" class="index-faq-section" data-layout-spec="בית-faq" style="">
+<section data-band-index="6" id="faq" class="index-faq-section" data-layout-spec="בית-faq">
   <div class="index-faq-section__container">
     <!-- Section Heading -->
     <div class="index-faq-section__heading">
@@ -1751,7 +1762,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
         </div>
         <div class="index-faq-section__card-content">
           <h3 class="index-faq-section__card-title">מה עושים כשיש ריח של גז?</h3>
-          <p class="index-faq-section__card-text" style="">יש לסגור מיד את ברז הגז הראשי, לפתוח חלונות, לא להדליק אש או מכשירי חשמל, ולצאת מהבית. חייגו אלינו מיד ונשלח טכנאי גז מוסמך לבדיקת תקינות גז לדירה. בחשד למקרה חירום יש לדווח במיידי לחברת הגז.</p>
+          <p class="index-faq-section__card-text">יש לסגור מיד את ברז הגז הראשי, לפתוח חלונות, לא להדליק אש או מכשירי חשמל, ולצאת מהבית. חייגו אלינו מיד ונשלח טכנאי גז מוסמך לבדיקת תקינות גז לדירה. בחשד למקרה חירום יש לדווח במיידי לחברת הגז.</p>
         </div>
       </article>
 
@@ -1816,7 +1827,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
         </div>
         <div class="index-faq-section__card-content">
           <h3 class="index-faq-section__card-title">באילו אזורים בירושלים אתם נותנים שירות?</h3>
-          <p class="index-faq-section__card-text" style="">אנחנו משרתים את כל שכונות ירושלים והסביבה, כולל מבשרת ציון, גבעת זאב, מעלה אדומים ובית שמש. טכנאי גז בירושלים זמין עבורכם 24/6.</p>
+          <p class="index-faq-section__card-text">אנחנו משרתים את כל שכונות ירושלים והסביבה, כולל מבשרת ציון, גבעת זאב, מעלה אדומים ובית שמש. טכנאי גז בירושלים זמין עבורכם 24/6.</p>
         </div>
       </article>
 
@@ -1829,7 +1840,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
           <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" fill="currentColor"></path>
         </svg>
       </div>
-      <p class="index-faq-section__cta-text" style="">
+      <p class="index-faq-section__cta-text">
         <strong>דחוף? אל תחכו.</strong> במקרה של חשד לדליפת גז או תקלה דחופה, חייגו מיד. בחשד למקרה חירום דווחו מייד לחברת הגז.</p>
     </div>
   </div>
@@ -1842,7 +1853,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
   </div>
 </section>
 
-<section data-band-index="7" id="cta" class="index-cta-section" data-layout-spec="בית-cta" style="">
+<section data-band-index="7" id="cta" class="index-cta-section" data-layout-spec="בית-cta">
   <div class="index-cta-section__container">
     <!-- Header -->
     <h2 class="index-cta-section__title">צריכים טכנאי גז בירושלים? אנחנו כאן בשבילכם</h2>
@@ -1894,7 +1905,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"></path>
           </svg>
         </div>
-        <p class="index-cta-section__urgency-text" style="">
+        <p class="index-cta-section__urgency-text">
           <strong>לתשומת לבכם:</strong> במקרה של חשש לדליפת גז או ריח חריג, אנא צרו קשר טלפוני מיידי ואל תמתינו לפנייה דרך האתר. יש לפעול על פי הנחיות הבטיחות של גורם מוסמך. בחשד למקרה חירום דווחו מייד לחברת הגז.</p>
       </div>
     </div>
@@ -1916,7 +1927,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
       <!-- Company Info -->
       <div class="footer-col footer-company-col">
         <img src="/assets/image-home-services-gas-technician-logo.webp" alt="טכנאי גז בירושלים" class="logo" data-element-type="image" data-element-id="img-1784762321861-y52128hct" data-zappy-footer-image="true" decoding="async" width="35" height="35">
-        <p class="footer-tagline" style="">שירותי גז מקצועיים ואמינים בירושלים והסביבה. בטיחות, ניסיון וזמינות 24/6.</p>
+        <p class="footer-tagline">שירותי גז מקצועיים ואמינים בירושלים והסביבה. בטיחות, ניסיון וזמינות 24/6.</p>
       </div>
 
       <!-- Quick Links -->
@@ -1935,12 +1946,12 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
       <!-- Contact Info -->
       <div class="footer-col footer-contact-col">
         <h4>צור קשר</h4>
-        <ul class="footer-contact" style=""><li>
+        <ul class="footer-contact"><li>
             <span class="contact-icon"><i class="fas fa-envelope" data-element-type="icon" data-element-id="icon-1784762321852-0drajitms" data-icon-type="fontawesome" style="cursor: pointer;"></i></span>
             <span class="contact-text"><a href="mailto:dandavidcohen1@gamil.com">dandavidcohen1@gamil.com</a></span>
           </li><li>
             <span class="contact-icon"><i class="fas fa-phone" data-element-type="icon" data-element-id="icon-1784762321852-xxo5ppq89" data-icon-type="fontawesome" style="cursor: pointer;"></i></span>
-            <span class="contact-text"><a href="tel:+972559499173" style="">055-</a>9499173 (24/6)</span>
+            <span class="contact-text"><a href="tel:+972559499173">055-</a>9499173 (24/6)</span>
           </li><li><a href="https://www.google.com/maps/search/?api=1&amp;query=%D7%99%D7%A8%D7%95%D7%A9%D7%9C%D7%99%D7%9D" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:flex-start;gap:inherit"><span class="contact-icon"><i class="fas fa-map-marker-alt" data-element-type="icon" data-element-id="icon-1784762321852-rzz9h6kqu" data-icon-type="fontawesome" style="cursor: pointer;"></i></span>
             <span class="contact-text">ירושלים</span></a></li></ul>
       </div>
