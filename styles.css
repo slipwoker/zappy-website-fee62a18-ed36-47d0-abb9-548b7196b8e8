@@ -5171,6 +5171,12 @@ div[id*="mic-access-tool-box"] button[class*="reset"] * {
 .index-hero-section .hero-cta-row {
   margin-bottom: 12px !important;
 }
+
+@media (max-width: 768px) {
+#hero.index-hero-section {
+  min-height: auto !important;
+}
+}
 /* mobile-submenu-overflow-fix */
 @media (max-width: 768px) {
   .navbar .sub-menu.mobile-expanded,
