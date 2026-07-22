@@ -2,13 +2,13 @@
 
 A gas technician service operating in Jerusalem and the surrounding area, focused on local residential and commercial clients. The website is a single landing page designed to drive immediate contact via WhatsApp and a floating call button, emphasizing quick accessibility and trust for urgent or routine gas-related needs.
 
-Source: https://example.com
+Source: https://gaz-technician-in-jerusalem.zappy5.app
 
 ---
 
 ## טכנאי גז 24/7? השאירו פרטים ונדאג לכם מיד — טכנאי גז בירושלים
 
-URL: https://example.com
+URL: https://gaz-technician-in-jerusalem.zappy5.app
 Description: צריכים טכנאי גז בירושלים באופן דחוף? אנחנו כאן להתקנת גז ביתי, בדיקת תקינות וחיבור כיריים. שירות מקצועי ואמין עם זמינות מיידית בוואטסאפ. לחצו עכשיו!
 
 טכנאי גז 24/7? השאירו פרטים ונדאג לכם מיד — טכנאי גז בירושלים
@@ -761,7 +761,7 @@ Description: צריכים טכנאי גז בירושלים באופן דחוף? 
 
 ## מדיניות פרטיות
 
-URL: https://example.com/privacy
+URL: https://gaz-technician-in-jerusalem.zappy5.app/privacy
 Description: מדיניות הפרטיות שלנו - כיצד אנו אוספים, משתמשים ומגנים על המידע שלכם
 
 מדיניות פרטיות
@@ -1025,7 +1025,7 @@ Description: מדיניות הפרטיות שלנו - כיצד אנו אוספי
 
 ## הצהרת נגישות
 
-URL: https://example.com/accessibility
+URL: https://gaz-technician-in-jerusalem.zappy5.app/accessibility
 Description: הצהרת הנגישות שלנו - מחויבותנו לנגישות דיגיטלית
 
 הצהרת נגישות
@@ -1298,7 +1298,7 @@ Description: הצהרת הנגישות שלנו - מחויבותנו לנגיש�
 
 ## תנאי שימוש
 
-URL: https://example.com/terms
+URL: https://gaz-technician-in-jerusalem.zappy5.app/terms
 Description: תנאי השימוש באתר - הזכויות והחובות של המשתמשים
 
 תנאי שימוש
@@ -1590,7 +1590,7 @@ Description: תנאי השימוש באתר - הזכויות והחובות של
 
 ## תודה שפניתם אלינו
 
-URL: https://example.com/thank-you
+URL: https://gaz-technician-in-jerusalem.zappy5.app/thank-you
 Description: טכנאי גז בירושלים - תודה שפניתם אלינו
 
 תודה שפניתם אלינו
