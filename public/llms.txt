@@ -7,25 +7,25 @@
 ## Pages
 
 ### בית
-https://-fee62a18.zappy5.app
+https://example.com
 צריכים טכנאי גז בירושלים באופן דחוף? אנחנו כאן להתקנת גז ביתי, בדיקת תקינות וחיבור כיריים. שירות מקצועי ואמין עם זמינות מיידית בוואטסאפ. לחצו עכשיו!
 
 ### תודה שפניתם אלינו
-https://-fee62a18.zappy5.app/thank-you
+https://example.com/thank-you
 טכנאי גז בירושלים - תודה שפניתם אלינו
 
 ## Legal & Policy
 
 ### Privacy Policy
-https://-fee62a18.zappy5.app/privacy
+https://example.com/privacy
 Information about how user data is collected, stored, and protected.
 
 ### Terms & Conditions
-https://-fee62a18.zappy5.app/terms
+https://example.com/terms
 Legal terms describing service usage, rights, and policies.
 
 ### Accessibility Statement
-https://-fee62a18.zappy5.app/accessibility
+https://example.com/accessibility
 Information about WCAG compliance and accessibility features.
 
 ---
@@ -35,8 +35,8 @@ Information about WCAG compliance and accessibility features.
 - (No contact details configured yet.)
 
 ### Contact form
-- URL: https://-fee62a18.zappy5.app
-- Endpoint: https://-fee62a18.zappy5.app/api/email/contact-form
+- URL: https://example.com
+- Endpoint: https://example.com/api/email/contact-form
 - Method: POST
 - Content-Type: application/json
 - Fields:
@@ -66,6 +66,6 @@ Home Services / Gas Technician
 
 # Machine-readable feeds
 
-- Sitemap (XML): https://-fee62a18.zappy5.app/sitemap.xml
-- Robots: https://-fee62a18.zappy5.app/robots.txt
-- Flattened page text (for LLMs): https://-fee62a18.zappy5.app/llms-full.txt
+- Sitemap (XML): https://example.com/sitemap.xml
+- Robots: https://example.com/robots.txt
+- Flattened page text (for LLMs): https://example.com/llms-full.txt
