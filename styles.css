@@ -5189,6 +5189,26 @@ div[id*="mic-access-tool-box"] button[class*="reset"] * {
   padding-top: 16px !important;
 }
 }
+
+@media (max-width: 768px) {
+#hero.index-hero-section {
+  padding-top: 60px !important;
+}
+
+#services.index-services-section {
+  padding-bottom: 28px !important;
+}
+
+#benefits.index-benefits-section,
+  #trust-signals.index-trust-signals-section,
+  #testimonials.index-testimonials-section,
+  #service-area.index-service-area-section,
+  #faq.index-faq-section,
+  #cta.index-cta-section {
+  padding-top: 28px !important;
+  padding-bottom: 28px !important;
+}
+}
 /* mobile-submenu-overflow-fix */
 @media (max-width: 768px) {
   .navbar .sub-menu.mobile-expanded,
