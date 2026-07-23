@@ -5612,10 +5612,10 @@ function fixContrast(){
 })();
 
 
-/* ZAPPY_ECOM_LANGUAGE_ROUTING_RUNTIME_V25 */
+/* ZAPPY_ECOM_LANGUAGE_ROUTING_RUNTIME_V26 */
 (function() {
-  if (window.__zappyEcomLanguageRoutingRuntime >= 25) return;
-  window.__zappyEcomLanguageRoutingRuntime = 25;
+  if (window.__zappyEcomLanguageRoutingRuntime >= 26) return;
+  window.__zappyEcomLanguageRoutingRuntime = 26;
 
   // Routing strategy: use path-based language URLs for ALL storefront pages
   // (including dynamic /product/:slug and /category/:slug). The publish
@@ -6053,18 +6053,19 @@ function fixContrast(){
   // declaration merging that was eating the standalone CSS injection.
   function ensureRuntimeCssInjected() {
     var existing = document.getElementById('zappy-ecom-routing-runtime-css');
-    if (existing && existing.getAttribute('data-v') === '30') return;
+    if (existing && existing.getAttribute('data-v') === '31') return;
     if (existing) existing.remove();
     var style = document.createElement('style');
     style.id = 'zappy-ecom-routing-runtime-css';
     style.setAttribute('data-zappy-runtime', 'ecom-routing');
-    style.setAttribute('data-v', '30');
+    style.setAttribute('data-v', '31');
     style.textContent =
       '@media (min-width: 769px){' +
         'html[dir="ltr"] .nav-container > .nav-brand,body[dir="ltr"] .nav-container > .nav-brand,html[dir="ltr"] .nav-right-group > .nav-brand,body[dir="ltr"] .nav-right-group > .nav-brand{order:-1!important}' +
         'html[dir="ltr"] .nav-container > .nav-menu,body[dir="ltr"] .nav-container > .nav-menu,html[dir="ltr"] .nav-right-group > .nav-menu,body[dir="ltr"] .nav-right-group > .nav-menu{order:1!important;margin-inline-start:0!important;flex:1 1 0!important;min-width:0!important;overflow:visible!important;align-items:center!important}' +
         'html[dir="ltr"] .nav-container > .nav-menu > li,body[dir="ltr"] .nav-container > .nav-menu > li,html[dir="ltr"] .nav-right-group > .nav-menu > li,body[dir="ltr"] .nav-right-group > .nav-menu > li{flex:0 0 auto!important}' +
         'html[dir="ltr"] .nav-container > .lang-switcher,body[dir="ltr"] .nav-container > .lang-switcher,html[dir="ltr"] .nav-container > .nav-ecommerce-icons,body[dir="ltr"] .nav-container > .nav-ecommerce-icons,html[dir="ltr"] .nav-container > .nav-cta-container,body[dir="ltr"] .nav-container > .nav-cta-container,html[dir="ltr"] .nav-right-group > .lang-switcher,body[dir="ltr"] .nav-right-group > .lang-switcher,html[dir="ltr"] .nav-right-group > .nav-ecommerce-icons,body[dir="ltr"] .nav-right-group > .nav-ecommerce-icons,html[dir="ltr"] .nav-right-group > .nav-cta-container,body[dir="ltr"] .nav-right-group > .nav-cta-container{order:2!important;flex:0 0 auto!important;min-width:max-content!important}' +
+        '.nav-ecommerce-icons .nav-search-box{order:1!important}.nav-ecommerce-icons .lang-switcher{order:2!important}.nav-ecommerce-icons .login-link.nav-login{order:3!important}.nav-ecommerce-icons .cart-link.nav-cart{order:4!important}' +
         'html[dir="ltr"] .nav-container > .nav-ecommerce-icons.nav-icons-left,body[dir="ltr"] .nav-container > .nav-ecommerce-icons.nav-icons-left,html[dir="ltr"] .nav-right-group > .nav-ecommerce-icons.nav-icons-left,body[dir="ltr"] .nav-right-group > .nav-ecommerce-icons.nav-icons-left{margin-inline-start:auto!important;flex:0 0 auto!important;min-width:max-content!important}' +
         'html[dir="rtl"] .nav-container > .nav-menu,body[dir="rtl"] .nav-container > .nav-menu,html[dir="rtl"] .nav-right-group > .nav-menu,body[dir="rtl"] .nav-right-group > .nav-menu{flex:1 1 0!important;min-width:0!important;overflow:visible!important;align-items:center!important}' +
         'html[dir="rtl"] .nav-container > .nav-menu > li,body[dir="rtl"] .nav-container > .nav-menu > li,html[dir="rtl"] .nav-right-group > .nav-menu > li,body[dir="rtl"] .nav-right-group > .nav-menu > li{flex:0 0 auto!important}' +
