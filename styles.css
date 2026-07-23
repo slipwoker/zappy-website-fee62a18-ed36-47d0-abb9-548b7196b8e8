@@ -5219,6 +5219,14 @@ div[id*="mic-access-tool-box"] button[class*="reset"] * {
 body .whatsapp-float {
   display: none !important;
 }
+
+body .whatsapp-float {
+  display: flex !important;
+}
+
+body .whatsapp-float {
+  display: none !important;
+}
 /* mobile-submenu-overflow-fix */
 @media (max-width: 768px) {
   .navbar .sub-menu.mobile-expanded,
