@@ -5250,6 +5250,12 @@ body > a.whatsapp-float {
   left: 20px !important;
   right: auto !important;
 }
+
+body > a.whatsapp-float {
+  bottom: 100px !important;
+  left: 20px !important;
+  right: auto !important;
+}
 /* mobile-submenu-overflow-fix */
 @media (max-width: 768px) {
   .navbar .sub-menu.mobile-expanded,
