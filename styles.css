@@ -5266,6 +5266,12 @@ body > a.whatsapp-float {
   left: auto !important;
   right: 20px !important;
 }
+
+.index-cta-section a.whatsapp-float:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+  transition: all 0.3s ease;
+}
 /* mobile-submenu-overflow-fix */
 @media (max-width: 768px) {
   .navbar .sub-menu.mobile-expanded,
