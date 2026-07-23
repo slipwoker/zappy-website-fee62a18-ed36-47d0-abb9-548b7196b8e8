@@ -5317,6 +5317,10 @@ body > a.whatsapp-float {
   box-shadow: 0 6px 20px rgba(0,0,0,0.35);
   transition: all 0.3s ease;
 }
+
+.footer-social a[href*="wa.me"] {
+  display: none !important;
+}
 /* mobile-submenu-overflow-fix */
 @media (max-width: 768px) {
   .navbar .sub-menu.mobile-expanded,
