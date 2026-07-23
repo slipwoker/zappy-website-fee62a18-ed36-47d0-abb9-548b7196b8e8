@@ -1555,6 +1555,38 @@ if (document.readyState === 'complete') {
     }
 })();
 
+/* ZAPPY_CUSTOM_JS_START:04ca27e4a978 */
+(function () {
+  function __zappyCustomInit() {
+    try {
+// Fix WhatsApp floating button href - replace [whatsapp_handle] with real number
+(function() {
+  function fixWhatsAppFloat() {
+    var waBtn = document.querySelector('a.whatsapp-float');
+    if (waBtn) {
+      var currentHref = waBtn.getAttribute('href');
+      if (currentHref && currentHref.indexOf('whatsapp_handle') > -1) {
+        waBtn.setAttribute('href', 'https://wa.me/972559499173');
+      }
+    }
+  }
+  // Run immediately and also after a short delay (for late injection)
+  fixWhatsAppFloat();
+  setTimeout(fixWhatsAppFloat, 500);
+  setTimeout(fixWhatsAppFloat, 1500);
+})();
+    } catch (e) {
+      if (typeof console !== 'undefined' && console.warn) { console.warn('[zappy-custom-js]', e); }
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', __zappyCustomInit);
+  } else {
+    __zappyCustomInit();
+  }
+})();
+/* ZAPPY_CUSTOM_JS_END:04ca27e4a978 */
+
 
 /* ZAPPY_PUBLISHED_LIGHTBOX_RUNTIME */
 (function(){
