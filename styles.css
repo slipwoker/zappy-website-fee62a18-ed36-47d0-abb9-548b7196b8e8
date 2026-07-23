@@ -5261,6 +5261,11 @@ body .whatsapp-float {
   left: auto !important;
   right: 20px !important;
 }
+
+body > a.whatsapp-float {
+  left: auto !important;
+  right: 20px !important;
+}
 /* mobile-submenu-overflow-fix */
 @media (max-width: 768px) {
   .navbar .sub-menu.mobile-expanded,
