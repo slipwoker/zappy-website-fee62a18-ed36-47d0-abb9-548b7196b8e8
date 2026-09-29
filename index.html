@@ -399,10 +399,14 @@
     return 'zappy_purchase_fired_' + String(orderId || '');
   }
 
+  function purchaseMetaDedupKey(orderId) {
+    return 'zappy_purchase_meta_fired_' + String(orderId || '');
+  }
+
   function alreadyFiredPurchase(orderId) {
     if (!orderId) return false;
     try {
-      return sessionStorage.getItem(purchaseDedupKey(orderId)) === '1';
+      return window.sessionStorage.getItem(purchaseDedupKey(orderId)) === '1';
     } catch (e) {
       return false;
     }
@@ -410,8 +414,77 @@
 
   function markPurchaseFired(orderId) {
     if (!orderId) return;
-    try { sessionStorage.setItem(purchaseDedupKey(orderId), '1'); } catch (e) {}
+    try { window.sessionStorage.setItem(purchaseDedupKey(orderId), '1'); } catch (e) {}
   }
+
+  function alreadyFiredPurchaseMeta(orderId) {
+    if (!orderId) return false;
+    try {
+      return window.sessionStorage.getItem(purchaseMetaDedupKey(orderId)) === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function markPurchaseMetaFired(orderId) {
+    if (!orderId) return;
+    try { window.sessionStorage.setItem(purchaseMetaDedupKey(orderId), '1'); } catch (e) {}
+  }
+
+  function getPendingMetaEvents() {
+    try {
+      if (!Array.isArray(window.__zappyPendingMetaEvents)) {
+        window.__zappyPendingMetaEvents = [];
+      }
+      return window.__zappyPendingMetaEvents;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function enqueueMetaEvent(eventName, params, orderId) {
+    var q = getPendingMetaEvents();
+    if (orderId) {
+      for (var i = 0; i < q.length; i++) {
+        if (q[i] && q[i].orderId === orderId && q[i].eventName === eventName) return;
+      }
+    }
+    q.push({ eventName: eventName, params: params || {}, orderId: orderId || null });
+  }
+
+  /**
+   * Live sites replace the eager Meta snippet with a consent-gated lazy
+   * loader. Payment providers bounce the shopper back to /order-success
+   * before CookieConsent hydrates, so confirm-order used to fire Purchase
+   * while window.fbq was still undefined — then sessionStorage blocked a
+   * retry. Queue until fbq exists, then flush.
+   */
+  function flushPendingMetaEvents() {
+    if (typeof window.fbq !== 'function') return;
+    var q = getPendingMetaEvents().slice();
+    try { window.__zappyPendingMetaEvents = []; } catch (e) {}
+    for (var i = 0; i < q.length; i++) {
+      var item = q[i];
+      if (!item || !item.eventName) continue;
+      if (item.orderId && alreadyFiredPurchaseMeta(item.orderId)) continue;
+      try {
+        window.fbq('track', item.eventName, item.params || {});
+        if (item.orderId) markPurchaseMetaFired(item.orderId);
+      } catch (e2) {}
+    }
+  }
+  window.zappyFlushPendingMetaEvents = flushPendingMetaEvents;
+
+  var metaFlushAttempts = 0;
+  var metaFlushTimer = setInterval(function() {
+    metaFlushAttempts++;
+    flushPendingMetaEvents();
+    var pendingLen = 0;
+    try { pendingLen = (window.__zappyPendingMetaEvents || []).length; } catch (e) {}
+    if ((pendingLen === 0 && typeof window.fbq === 'function') || metaFlushAttempts > 60) {
+      clearInterval(metaFlushTimer);
+    }
+  }, 500);
 
   /**
    * Fire a marketing event to first-party analytics + GA4/GTM/Meta when present.
@@ -431,15 +504,19 @@
         metadata.pagePath = pagePath();
       }
 
+      var oid = '';
+      var purchaseAlreadySent = false;
+      var purchaseMetaAlreadySent = false;
       if (eventId === 'checkout_complete') {
-        var oid = String(metadata.orderId || metadata.order_id || metadata.transaction_id || '');
-        if (oid && alreadyFiredPurchase(oid)) return;
-        if (oid) markPurchaseFired(oid);
+        oid = String(metadata.orderId || metadata.order_id || metadata.transaction_id || '');
+        purchaseAlreadySent = !!(oid && alreadyFiredPurchase(oid));
+        purchaseMetaAlreadySent = !!(oid && alreadyFiredPurchaseMeta(oid));
+        if (purchaseAlreadySent && purchaseMetaAlreadySent) return;
       }
 
       // First-party (skip when already tracked via zappyTrackEcomAnalytics path
       // that opts out, or when caller already recorded under a different name)
-      if (!opts.skipFirstParty) {
+      if (!opts.skipFirstParty && !purchaseAlreadySent) {
         try {
           if (window.zappyAnalytics && typeof window.zappyAnalytics.track === 'function') {
             window.zappyAnalytics.track(eventId, metadata);
@@ -448,40 +525,53 @@
       }
 
       // GTM / dataLayer — platform-standard ecommerce event names
-      try {
-        window.dataLayer = window.dataLayer || [];
-        if (plat.ecom) {
-          var ga4ForGtm = buildGa4Params(eventId, metadata);
-          var ecommerce = {};
-          if (ga4ForGtm.transaction_id) ecommerce.transaction_id = ga4ForGtm.transaction_id;
-          if (ga4ForGtm.value != null) ecommerce.value = ga4ForGtm.value;
-          if (ga4ForGtm.currency) ecommerce.currency = ga4ForGtm.currency;
-          if (ga4ForGtm.items) ecommerce.items = ga4ForGtm.items;
-          window.dataLayer.push({ event: plat.gtm, ecommerce: ecommerce });
-          // Secondary Zappy-specific trigger for merchants who want it
-          if (eventId === 'checkout_complete' || eventId === 'checkout_started') {
-            window.dataLayer.push({ event: eventId, ecommerce: ecommerce });
+      if (!purchaseAlreadySent) {
+        try {
+          window.dataLayer = window.dataLayer || [];
+          if (plat.ecom) {
+            var ga4ForGtm = buildGa4Params(eventId, metadata);
+            var ecommerce = {};
+            if (ga4ForGtm.transaction_id) ecommerce.transaction_id = ga4ForGtm.transaction_id;
+            if (ga4ForGtm.value != null) ecommerce.value = ga4ForGtm.value;
+            if (ga4ForGtm.currency) ecommerce.currency = ga4ForGtm.currency;
+            if (ga4ForGtm.items) ecommerce.items = ga4ForGtm.items;
+            window.dataLayer.push({ event: plat.gtm, ecommerce: ecommerce });
+            // Secondary Zappy-specific trigger for merchants who want it
+            if (eventId === 'checkout_complete' || eventId === 'checkout_started') {
+              window.dataLayer.push({ event: eventId, ecommerce: ecommerce });
+            }
+          } else {
+            var dl = { event: plat.gtm };
+            for (var k in metadata) {
+              if (Object.prototype.hasOwnProperty.call(metadata, k)) dl[k] = metadata[k];
+            }
+            window.dataLayer.push(dl);
           }
+        } catch (e2) {}
+
+        // GA4 gtag
+        try {
+          if (typeof window.gtag === 'function') {
+            window.gtag('event', plat.ga4, buildGa4Params(eventId, metadata));
+          }
+        } catch (e3) {}
+
+        if (oid) markPurchaseFired(oid);
+      }
+
+      // Meta Pixel — live sites lazy-load fbq after marketing consent. If the
+      // stub is not defined yet, queue and flush when the pixel arrives.
+      try {
+        if (purchaseMetaAlreadySent) {
+          // already delivered to Meta
         } else {
-          var dl = { event: plat.gtm };
-          for (var k in metadata) {
-            if (Object.prototype.hasOwnProperty.call(metadata, k)) dl[k] = metadata[k];
+          var metaParams = buildMetaParams(eventId, metadata);
+          if (typeof window.fbq === 'function') {
+            window.fbq('track', plat.meta, metaParams);
+            if (oid) markPurchaseMetaFired(oid);
+          } else {
+            enqueueMetaEvent(plat.meta, metaParams, eventId === 'checkout_complete' ? oid : null);
           }
-          window.dataLayer.push(dl);
-        }
-      } catch (e2) {}
-
-      // GA4 gtag
-      try {
-        if (typeof window.gtag === 'function') {
-          window.gtag('event', plat.ga4, buildGa4Params(eventId, metadata));
-        }
-      } catch (e3) {}
-
-      // Meta Pixel (only when fbq is loaded — consent-gated lazy loader)
-      try {
-        if (typeof window.fbq === 'function') {
-          window.fbq('track', plat.meta, buildMetaParams(eventId, metadata));
         }
       } catch (e4) {}
     } catch (err) {}
@@ -1256,15 +1346,15 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
   
   <main id="main">
     <section data-band-index="0" id="hero" class="index-hero-section" data-layout-spec="בית-hero" data-hero-treatment="fade-bleed" style="--hero-fade-color: var(--bg-light);" data-hero-type="fullscreen-scrim">
-  <img loading="eager" fetchpriority="high" class="hero-fade-img" data-hero-bg="true" data-placeholder="index-hero-image-1" data-context="A uniformed certified gas technician inspecting a clean residential kitchen gas connection in Jerusalem. Natural daylight, calm expression, gas hose and meter detail visible. Subject positioned on the left side of the frame, leaving the right side empty for a text panel overlay." width="1200" height="600" src="/assets/site-image-index-hero-image-1.webp" alt="טכנאי גז מוסמך בודק חיבור גז במטבח בירושלים" data-hero-background="true" data-element-type="image" data-element-id="img-1784762321853-k0a6ep8a1" style="position: absolute; object-fit: cover; object-position: 50% 50%; max-width: none; max-height: none; margin: 0; inset: 0; width: 100%; height: 100%" decoding="async">
+  <img loading="eager" fetchpriority="high" class="hero-fade-img" data-hero-bg="true" data-placeholder="index-hero-image-1" data-context="A uniformed certified gas technician inspecting a clean residential kitchen gas connection in Jerusalem. Natural daylight, calm expression, gas hose and meter detail visible. Subject positioned on the left side of the frame, leaving the right side empty for a text panel overlay." width="1200" height="600" src="/assets/site-image-index-hero-image-1.webp" alt="טכנאי גז מוסמך בודק חיבור גז במטבח בירושלים" data-hero-background="true" data-element-type="image" data-element-id="img-1784762321853-k0a6ep8a1" decoding="async">
   
   <div class="hero-fade-content">
     <p><span class="hero-eyebrow">שירות טכנאי גז מוסמך</span>
-    </p><h1 class="display-xl">טכנאי גז בירושלים והסביבה – זמין עכשיו!<br>התקנת כריים ב 200₪</h1>
-    <h3 class="hero-support">מענה מהיר ומקצועי לבדיקות, תיקונים, התקנות וכל תקלת גז&nbsp;</h3>
-    <p>טכנאי מוסמך עם ניסיון רב, שירות אדיב ותקשורת ברורה. צרו קשר בוואטסאפ או בטלפון וקבלו שירות מיידי &gt;&gt;&gt; <span style="font-size: 1rem; background-color: initial;">972-559499173+</span></p>
+    </p><h1 class="display-xl" style="">טכנאי גז בירושלים והסביבה – זמין עכשיו!<br>תיקון כל סוגי מחממי מים/יונרקסים&nbsp;</h1>
+    <h3 class="hero-support" style="">מענה מהיר ומקצועי לבדיקות, תיקונים, התקנות וכל תקלת גז&nbsp;</h3>
+    <p style="">טכנאי מוסמך עם ניסיון רב, שירות אדיב ותקשורת ברורה. צרו קשר בוואטסאפ או בטלפון וקבלו שירות מיידי &gt;&gt;&gt; <span style="font-size: 1rem; background-color: initial;">972-559499173+</span></p>
     
-    <div class="hero-cta-row"><a href="https://wa.me/972559499173" class="hero-whatsapp-btn" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:8px;background:#25D366;color:#fff;padding:14px 28px;border-radius:50px;text-decoration:none;font-weight:700;font-size:1.1rem;"><i class="fab fa-whatsapp" style="font-size:1.3rem;"></i> שלחו הודעה בוואטסאפ</a></div>
+    <div class="hero-cta-row"><a href="https://wa.me/972559499173" class="hero-whatsapp-btn" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:8px;background:#25D366;color:#fff;padding:14px 28px;border-radius:50px;text-decoration:none;font-weight:700;font-size:1.1rem;" data-element-type="button" data-element-id="btn-1790664557717-hunbuupnl" data-native-element="true"><i class="fab fa-whatsapp" style="font-size:1.3rem;"></i> שלחו הודעה בוואטסאפ</a></div>
     
     <div class="hero-trust-row">
       <div class="trust-item">
@@ -1277,7 +1367,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
       </div>
       <div class="trust-item">
         <i class="fas fa-clock" data-element-type="icon" data-element-id="icon-1784762321852-u0x2gnrnt" data-icon-type="fontawesome"></i>
-        <span>זמינות מיידית 24/6</span>
+        <span style="">זמינות מיידית 24/6</span>
       </div>
     </div>
   </div>
@@ -1305,8 +1395,8 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
                         <circle cx="12" cy="20" r="2" fill="currentColor"></circle>
                     </svg>
                 </div>
-                <h3 class="index-services-section__card-title">בדיקת דליפות ותיקון</h3>
-                <p class="index-services-section__card-text">איתור וטיפול מהיר דליפות גז במערכות ביתיות&nbsp; שימוש בציוד מתקדם לבדיקת תקינות וחיבור בטוח של כל הרכיבים.</p>
+                <h3 class="index-services-section__card-title" style="">בדיקת דליפות ותיקון</h3>
+                <p class="index-services-section__card-text" style="">איתור וטיפול מהיר דליפות גז במערכות ביתיות&nbsp; שימוש בציוד מתקדם לבדיקת תקינות וחיבור בטוח של כל הרכיבים.</p>
                 <div class="index-services-section__card-note" id="zappy-section-8">
                     <svg class="index-services-section__check-icon" data-element-type="icon" data-icon-type="svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M9 16.17L4.83 12L3.41 13.41L9 19L21 7L19.59 5.59L9 16.17Z" fill="currentColor"></path>
@@ -1368,11 +1458,11 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
         כשמדובר בבטיחות הבית והמשפחה, חשוב לבחור איש מקצוע שזמין, אמין ומכיר את השכונה.
         כטכנאי גז מקומי בירושלים, אני מבין את הצרכים הייחודיים של תושבי העיר – מבנייני דירות ועד תשתיות גז ותיקות.
       </p>
-      <p class="index-benefits-intro">
+      <p class="index-benefits-intro" style="">
         המטרה שלי היא לספק שירות מהיר, שקוף ובטוח, במקסימום אמינות ובטיחון.&nbsp;<span style="font-size: 1rem;">מהתקנת כיריים ועד בדיקת תקינות מלאה – אני כאן כדי להבטיח שהכול יעבוד כמו שצריך.</span><br></p>
 
       <!-- Benefits List -->
-      <ul class="index-benefits-list"><li class="index-benefits-item" data-grid-item-index="0">
+      <ul class="index-benefits-list" style=""><li class="index-benefits-item" data-grid-item-index="0">
           <div class="index-benefits-icon-wrapper">
             <svg class="index-benefits-icon" data-element-type="icon" data-icon-type="svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="cursor: pointer;">
               <circle cx="12" cy="12" r="10" fill="var(--primary)" opacity="0.12"></circle>
@@ -1391,8 +1481,8 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
             </svg>
           </div>
           <div class="index-benefits-text">
-            <h3 class="index-benefits-item-title">תשומת לב לפרטים הקטנים</h3>
-            <p class="index-benefits-item-desc">אני מקדיש לכל לקוח ולקוח את הזמן שלנו בהתאם לצרכים ובאמינות מקסימלית</p>
+            <h3 class="index-benefits-item-title" style="">תשומת לב לפרטים הקטנים</h3>
+            <p class="index-benefits-item-desc" style="">אני מקדיש לכל לקוח ולקוח את הזמן שלנו בהתאם לצרכים ובאמינות מקסימלית</p>
           </div>
         </li><li class="index-benefits-item" data-grid-item-index="2">
           <div class="index-benefits-icon-wrapper">
@@ -1422,7 +1512,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
     <!-- END Column: Imagery + Certification Tile -->
     <div class="index-benefits-media">
       <div class="index-benefits-image-frame">
-        <div id="zappy-carousel-1784762557487-ont0lr" data-zappy-image-carousel="true" data-zappy-hero-carousel="true" data-interval="4000" class="zappy-carousel-inline" style="position:relative;overflow:hidden;width:352px;max-width:100%;aspect-ratio:1.3333;margin-left:auto;margin-right:auto;"><div class="zappy-carousel-slide is-active" style=";;;opacity:1 !important;pointer-events:auto !important;z-index:1 !important;"><div data-zappy-zoom-wrapper="true" data-element-id="img-1784762321857-rvjdoh1on" data-element-type="image" data-zappy-zoom-wrapper-width-mode="full" style="position: absolute; top: 0px !important; left: 0px !important; width: 100%; height: 100%; max-width: none; margin-left: 0px !important; margin-right: 0px !important; display: block !important; z-index: 1 !important; overflow: hidden; inset: 0; max-height: none" data-zappy-zoom-clip="true" data-zappy-wrapper-margins-applied="true" data-zappy-zoom-wrapper-align="center"><img loading="lazy" decoding="async" data-placeholder="index-benefits-image-1" data-context="A bright, clean photo of a professional gas technician in a neat uniform, kneeling beside a modern kitchen gas connection, using a digital manometer to test pressure. The kitchen is bright with natural light, showing a safe residential Jerusalem apartment setting. The technician looks focused and trustworthy." width="600" height="400" src="/assets/site-image-index-benefits-image-1.webp" alt="טכנאי גז מוסמך בודק חיבור גז במטבח ביתי בירושלים" class="index-benefits-main-image" data-element-type="image" data-element-id="img-1784762321857-rvjdoh1on" style="object-position: 92% 70%; display: block !important; object-fit: cover; margin: 0; width: 100%; height: 100%; max-width: none; max-height: none; position: absolute; inset: 0" data-zappy-zoom="1" fetchpriority="low"></div></div></div>
+        <div id="zappy-carousel-1784762557487-ont0lr" data-zappy-image-carousel="true" data-zappy-hero-carousel="true" data-interval="4000" class="zappy-carousel-inline" style="position:relative;overflow:hidden;width:352px;max-width:100%;aspect-ratio:1.3333;margin-left:auto;margin-right:auto;"><div class="zappy-carousel-slide is-active" style=";;;opacity:1 !important;pointer-events:auto !important;z-index:1 !important;"><div data-zappy-zoom-wrapper="true" data-element-id="img-1784762321857-rvjdoh1on" data-element-type="image" data-zappy-zoom-wrapper-width-mode="full" style="position: absolute !important; top: 0px !important; left: 0px !important; width: 100% !important; height: 100% !important; max-width: none !important; margin-left: 0px !important; margin-right: 0px !important; display: block !important; z-index: 1 !important; overflow: hidden !important;" data-zappy-zoom-clip="true" data-zappy-wrapper-margins-applied="true" data-zappy-zoom-wrapper-align="center"><img loading="lazy" decoding="async" data-placeholder="index-benefits-image-1" data-context="A bright, clean photo of a professional gas technician in a neat uniform, kneeling beside a modern kitchen gas connection, using a digital manometer to test pressure. The kitchen is bright with natural light, showing a safe residential Jerusalem apartment setting. The technician looks focused and trustworthy." width="600" height="400" src="/assets/site-image-index-benefits-image-1.webp" alt="טכנאי גז מוסמך בודק חיבור גז במטבח ביתי בירושלים" class="index-benefits-main-image" data-element-type="image" data-element-id="img-1784762321857-rvjdoh1on" style="object-position: 92% 70%; display: block !important; object-fit: cover !important; margin: 0px !important; left: 0% !important; top: 0% !important; width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; position: absolute !important;" data-zappy-zoom="1" fetchpriority="low"></div></div></div>
         <!-- Certification Document Tile (peeking from bottom-start) -->
         <div class="index-benefits-cert-tile" aria-hidden="true">
           <div class="index-benefits-cert-inner">
@@ -1496,7 +1586,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
           </svg>
         </div>
         <h3 class="index-trust-signals-section-card-title">שירות לבית ולעסק</h3>
-        <p class="index-trust-signals-section-card-text">מתן פתרונות גז מותאמים אישית ללקוחות פרטיים, מסעדות, בתי קפה ומוסדות בירושלים והסביבה בהתאם לדרישות החוק</p>
+        <p class="index-trust-signals-section-card-text" style="">מתן פתרונות גז מותאמים אישית ללקוחות פרטיים, מסעדות, בתי קפה ומוסדות בירושלים והסביבה בהתאם לדרישות החוק</p>
       </div>
       <div class="index-trust-signals-section-card" data-grid-item-index="3" id="zappy-section-26">
         <div class="index-trust-signals-section-card-icon" id="zappy-section-27">
@@ -1564,7 +1654,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
             <path d="M9.983 3.5C5.928 3.5 3.5 6.347 3.5 10.022c0 1.983.828 3.417 2.246 4.265-.354 1.25-1.042 2.279-2.246 3.213l1.5 1.5c2.5-1.5 4.5-3.5 5.483-6.483C11.486 10.017 10.483 7.5 9.983 3.5zM19.983 3.5c-4.055 0-6.483 2.847-6.483 6.522 0 1.983.828 3.417 2.246 4.265-.354 1.25-1.042 2.279-2.246 3.213l1.5 1.5c2.5-1.5 4.5-3.5 5.483-6.483C21.486 10.017 20.483 7.5 19.983 3.5z"></path>
           </svg>
         </div>
-        <p class="index-testimonials-section-quote">"הרחנו ריח גז חזק במטבח ונכנסתי ללחץ. התקשרתי לדן והוא הגיע תוך פחות מחצי שעה. זיהה את הנזילה, תיקן בשקט והרגיע אותנו. שירות מעולה!"</p>
+        <p class="index-testimonials-section-quote" style="">"הרחנו ריח גז חזק במטבח ונכנסתי ללחץ. התקשרתי לדן והוא הגיע תוך פחות מחצי שעה. זיהה את הנזילה, תיקן בשקט והרגיע אותנו. שירות מעולה!"</p>
         <div class="index-testimonials-section-stars" aria-label="5 out of 5 stars" id="zappy-section-39">
           <svg data-element-type="icon" data-icon-type="svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
           <svg data-element-type="icon" data-icon-type="svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
@@ -1583,7 +1673,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
             <path d="M9.983 3.5C5.928 3.5 3.5 6.347 3.5 10.022c0 1.983.828 3.417 2.246 4.265-.354 1.25-1.042 2.279-2.246 3.213l1.5 1.5c2.5-1.5 4.5-3.5 5.483-6.483C11.486 10.017 10.483 7.5 9.983 3.5zM19.983 3.5c-4.055 0-6.483 2.847-6.483 6.522 0 1.983.828 3.417 2.246 4.265-.354 1.25-1.042 2.279-2.246 3.213l1.5 1.5c2.5-1.5 4.5-3.5 5.483-6.483C21.486 10.017 20.483 7.5 19.983 3.5z"></path>
           </svg>
         </div>
-        <p class="index-testimonials-section-quote">"עברנו דירה ולא היה חיבור גז לכיריים. דן הגיע בזמן, הסביר בסבלנות מה צריך לעשות, התקין הכול בצורה נקייה ומסודרת. מחיר הוגן ושירות אדיב."</p>
+        <p class="index-testimonials-section-quote" style="">"עברנו דירה ולא היה חיבור גז לכיריים. דן הגיע בזמן, הסביר בסבלנות מה צריך לעשות, התקין הכול בצורה נקייה ומסודרת. מחיר הוגן ושירות אדיב."</p>
         <div class="index-testimonials-section-stars" aria-label="5 out of 5 stars" id="zappy-section-42">
           <svg data-element-type="icon" data-icon-type="svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
           <svg data-element-type="icon" data-icon-type="svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
@@ -1602,7 +1692,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
             <path d="M9.983 3.5C5.928 3.5 3.5 6.347 3.5 10.022c0 1.983.828 3.417 2.246 4.265-.354 1.25-1.042 2.279-2.246 3.213l1.5 1.5c2.5-1.5 4.5-3.5 5.483-6.483C11.486 10.017 10.483 7.5 9.983 3.5zM19.983 3.5c-4.055 0-6.483 2.847-6.483 6.522 0 1.983.828 3.417 2.246 4.265-.354 1.25-1.042 2.279-2.246 3.213l1.5 1.5c2.5-1.5 4.5-3.5 5.483-6.483C21.486 10.017 20.483 7.5 19.983 3.5z"></path>
           </svg>
         </div>
-        <p class="index-testimonials-section-quote">"יש לנו מטבחון קטן בבית קפה, והיינו חייבים בדיקת תקינות גז דחופה. דן עשה עבודה יסודית, השאיר הכול נקי ונתן לנו טיפים חשובים לבטיחות. מקצוען אמיתי."</p>
+        <p class="index-testimonials-section-quote" style="">"יש לנו מטבחון קטן בבית קפה, והיינו חייבים בדיקת תקינות גז דחופה. דן עשה עבודה יסודית, השאיר הכול נקי ונתן לנו טיפים חשובים לבטיחות. מקצוען אמיתי."</p>
         <div class="index-testimonials-section-stars" aria-label="5 out of 5 stars" id="zappy-section-45">
           <svg data-element-type="icon" data-icon-type="svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
           <svg data-element-type="icon" data-icon-type="svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
@@ -1610,13 +1700,13 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
           <svg data-element-type="icon" data-icon-type="svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
           <svg data-element-type="icon" data-icon-type="svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
         </div>
-        <p class="index-testimonials-section-name">בית קפה "הפינה"</p>
+        <p class="index-testimonials-section-name" style="">בית קפה "הפינה"</p>
         <p class="index-testimonials-section-context">בדיקת תקינות גז לעסק – מרכז העיר, ירושלים</p>
       </article>
     </div>
 
     <!-- Service Area Note -->
-    <p class="index-testimonials-section-note">טכנאי גז בירושלים – זמינים 24/6 לכל תושבי ירושלים, מבשרת ציון, גבעת זאב, מעלה אדומים, בית שמש והיישובים הסמוכים.</p>
+    <p class="index-testimonials-section-note" style="">טכנאי גז בירושלים – זמינים 24/6 לכל תושבי ירושלים, מבשרת ציון, גבעת זאב, מעלה אדומים, בית שמש והיישובים הסמוכים.</p>
   </div>
 
   <!-- Bottom Divider: Torn-paper SVG -->
@@ -1695,10 +1785,10 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
                 <div class="content-block">
                     <h2>טכנאי גז בירושלים והסביבה</h2>
                     <div class="section-underline" aria-hidden="true" id="zappy-section-48"></div>
-                    <p>אנחנו משרתים את ירושלים ואת כל היישובים הסמוכים — ממרכז העיר ועד לשכונות החדשות. בין אם אתם רוכשים דירה חדשה, משפצים את הבית, או צריכים בדיקת תקינות דחופה, אנחנו כאן עם שירות מקצועי, מהיר ואמין. אני מכיר כל פינה באזור, כך שאתם יכולים להיות רגועים שהטכנאי יגיע אליכם בזמן.</p>
+                    <p style="">אנחנו משרתים את ירושלים ואת כל היישובים הסמוכים — ממרכז העיר ועד לשכונות החדשות. בין אם אתם רוכשים דירה חדשה, משפצים את הבית, או צריכים בדיקת תקינות דחופה, אנחנו כאן עם שירות מקצועי, מהיר ואמין. אני מכיר כל פינה באזור, כך שאתם יכולים להיות רגועים שהטכנאי יגיע אליכם בזמן.</p>
                     
                     <!-- Neighborhood Chips Grid -->
-                    <div class="neighborhood-chips-grid">
+                    <div class="neighborhood-chips-grid" style="">
                         <span class="neighborhood-chip">מרכז העיר</span>
                         <span class="neighborhood-chip">רחביה</span>
                         <span class="neighborhood-chip">בית הכרם</span>
@@ -1732,7 +1822,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
     </div>
 </section>
 
-<section data-band-index="6" id="faq" class="index-faq-section" data-layout-spec="בית-faq">
+<section data-band-index="6" id="faq" class="index-faq-section" data-layout-spec="בית-faq" style="">
   <div class="index-faq-section__container" id="zappy-section-50">
     <!-- Section Heading -->
     <div class="index-faq-section__heading" id="zappy-section-51">
@@ -1753,7 +1843,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
         </div>
         <div class="index-faq-section__card-content" id="zappy-section-56">
           <h3 class="index-faq-section__card-title">מה עושים כשיש ריח של גז?</h3>
-          <p class="index-faq-section__card-text">יש לסגור מיד את ברז הגז הראשי, לפתוח חלונות, לא להדליק אש או מכשירי חשמל, ולצאת מהבית. חייגו אלינו מיד ונשלח טכנאי גז מוסמך לבדיקת תקינות גז לדירה. בחשד למקרה חירום יש לדווח במיידי לחברת הגז.</p>
+          <p class="index-faq-section__card-text" style="">יש לסגור מיד את ברז הגז הראשי, לפתוח חלונות, לא להדליק אש או מכשירי חשמל, ולצאת מהבית. חייגו אלינו מיד ונשלח טכנאי גז מוסמך לבדיקת תקינות גז לדירה. בחשד למקרה חירום יש לדווח במיידי לחברת הגז.</p>
         </div>
       </article>
 
@@ -1818,7 +1908,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
         </div>
         <div class="index-faq-section__card-content" id="zappy-section-71">
           <h3 class="index-faq-section__card-title">באילו אזורים בירושלים אתם נותנים שירות?</h3>
-          <p class="index-faq-section__card-text">אנחנו משרתים את כל שכונות ירושלים והסביבה, כולל מבשרת ציון, גבעת זאב, מעלה אדומים ובית שמש. טכנאי גז בירושלים זמין עבורכם 24/6.</p>
+          <p class="index-faq-section__card-text" style="">אנחנו משרתים את כל שכונות ירושלים והסביבה, כולל מבשרת ציון, גבעת זאב, מעלה אדומים ובית שמש. טכנאי גז בירושלים זמין עבורכם 24/6.</p>
         </div>
       </article>
 
@@ -1831,7 +1921,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
           <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" fill="currentColor"></path>
         </svg>
       </div>
-      <p class="index-faq-section__cta-text">
+      <p class="index-faq-section__cta-text" style="">
         <strong>דחוף? אל תחכו.</strong> במקרה של חשד לדליפת גז או תקלה דחופה, חייגו מיד. בחשד למקרה חירום דווחו מייד לחברת הגז.</p>
     </div>
   </div>
@@ -1844,7 +1934,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
   </div>
 </section>
 
-<section data-band-index="7" id="cta" class="index-cta-section" data-layout-spec="בית-cta">
+<section data-band-index="7" id="cta" class="index-cta-section" data-layout-spec="בית-cta" style="">
   <div class="index-cta-section__container" id="zappy-section-76">
     <!-- Header -->
     <h2 class="index-cta-section__title">צריכים טכנאי גז בירושלים? אנחנו כאן בשבילכם</h2>
@@ -1893,13 +1983,13 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"></path>
           </svg>
         </div>
-        <p class="index-cta-section__urgency-text">
+        <p class="index-cta-section__urgency-text" style="">
           <strong>לתשומת לבכם:</strong> במקרה של חשש לדליפת גז או ריח חריג, אנא צרו קשר טלפוני מיידי ואל תמתינו לפנייה דרך האתר. יש לפעול על פי הנחיות הבטיחות של גורם מוסמך. בחשד למקרה חירום דווחו מייד לחברת הגז</p>
       </div>
     </div>
 
     <!-- Floating Buttons -->
-    <a href="https://wa.me/972559499173" class="whatsapp-float" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" style="position: fixed; bottom: 24px;  z-index: 9999; width: 60px; height: 60px; background: #25D366; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.25); text-decoration: none; "><i class="fab fa-whatsapp" style="color:#fff;font-size:32px;"></i></a>
+    <a href="https://wa.me/972559499173" class="whatsapp-float" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" style="position: fixed; bottom: 24px; right: 24px; z-index: 9999; width: 60px; height: 60px; background: #25D366; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.25); text-decoration: none; left: auto"><i class="fab fa-whatsapp" style="color:#fff;font-size:32px;"></i></a>
     
   </div>
 </section>
@@ -1911,7 +2001,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
       <!-- Company Info -->
       <div class="footer-col footer-company-col">
         <img src="/assets/image-home-services-gas-technician-logo.webp" alt="טכנאי גז בירושלים" class="logo" data-element-type="image" data-element-id="img-1784762321861-y52128hct" data-zappy-footer-image="true" decoding="async" width="35" height="35">
-        <p class="footer-tagline">שירותי גז מקצועיים ואמינים בירושלים והסביבה. בטיחות, ניסיון וזמינות 24/6.</p>
+        <p class="footer-tagline" style="">שירותי גז מקצועיים ואמינים בירושלים והסביבה. בטיחות, ניסיון וזמינות 24/6.</p>
       </div>
 
       <!-- Quick Links -->
@@ -1930,12 +2020,12 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
       <!-- Contact Info -->
       <div class="footer-col footer-contact-col">
         <h4>צור קשר</h4>
-        <ul class="footer-contact"><li>
+        <ul class="footer-contact" style=""><li>
             <span class="contact-icon"><i class="fas fa-envelope" data-element-type="icon" data-element-id="icon-1784762321852-0drajitms" data-icon-type="fontawesome" style="cursor: pointer;"></i></span>
             <span class="contact-text"><a href="mailto:dandavidcohen1@gamil.com">dandavidcohen1@gamil.com</a></span>
           </li><li>
             <span class="contact-icon"><i class="fas fa-phone" data-element-type="icon" data-element-id="icon-1784762321852-xxo5ppq89" data-icon-type="fontawesome" style="cursor: pointer;"></i></span>
-            <span class="contact-text"><a href="tel:+972559499173">055-</a>9499173 (דן)</span>
+            <span class="contact-text"><a href="tel:+972559499173" style="">055-</a>9499173 (דן)</span>
           </li><li><a href="https://www.google.com/maps/search/?api=1&amp;query=%D7%99%D7%A8%D7%95%D7%A9%D7%9C%D7%99%D7%9D" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:flex-start;gap:inherit"><span class="contact-icon"><i class="fas fa-map-marker-alt" data-element-type="icon" data-element-id="icon-1784762321852-rzz9h6kqu" data-icon-type="fontawesome" style="cursor: pointer;"></i></span>
             <span class="contact-text">ירושלים</span></a></li></ul>
       </div>
