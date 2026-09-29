@@ -35,7 +35,7 @@ Information about WCAG compliance and accessibility features.
 - Email: dandavidcohen1@gamil.com
 - Phone: +972559499173
 - Phone (tel): tel:+972559499173
-- Address: ירושלים
+- Address: 7 אדמונד סחייק, ירושלים, 93133, ישראל
 
 ### Contact form
 - URL: https://gaz-technician-in-jerusalem.zappy5.app

@@ -399,10 +399,14 @@
     return 'zappy_purchase_fired_' + String(orderId || '');
   }
 
+  function purchaseMetaDedupKey(orderId) {
+    return 'zappy_purchase_meta_fired_' + String(orderId || '');
+  }
+
   function alreadyFiredPurchase(orderId) {
     if (!orderId) return false;
     try {
-      return sessionStorage.getItem(purchaseDedupKey(orderId)) === '1';
+      return window.sessionStorage.getItem(purchaseDedupKey(orderId)) === '1';
     } catch (e) {
       return false;
     }
@@ -410,8 +414,77 @@
 
   function markPurchaseFired(orderId) {
     if (!orderId) return;
-    try { sessionStorage.setItem(purchaseDedupKey(orderId), '1'); } catch (e) {}
+    try { window.sessionStorage.setItem(purchaseDedupKey(orderId), '1'); } catch (e) {}
   }
+
+  function alreadyFiredPurchaseMeta(orderId) {
+    if (!orderId) return false;
+    try {
+      return window.sessionStorage.getItem(purchaseMetaDedupKey(orderId)) === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function markPurchaseMetaFired(orderId) {
+    if (!orderId) return;
+    try { window.sessionStorage.setItem(purchaseMetaDedupKey(orderId), '1'); } catch (e) {}
+  }
+
+  function getPendingMetaEvents() {
+    try {
+      if (!Array.isArray(window.__zappyPendingMetaEvents)) {
+        window.__zappyPendingMetaEvents = [];
+      }
+      return window.__zappyPendingMetaEvents;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function enqueueMetaEvent(eventName, params, orderId) {
+    var q = getPendingMetaEvents();
+    if (orderId) {
+      for (var i = 0; i < q.length; i++) {
+        if (q[i] && q[i].orderId === orderId && q[i].eventName === eventName) return;
+      }
+    }
+    q.push({ eventName: eventName, params: params || {}, orderId: orderId || null });
+  }
+
+  /**
+   * Live sites replace the eager Meta snippet with a consent-gated lazy
+   * loader. Payment providers bounce the shopper back to /order-success
+   * before CookieConsent hydrates, so confirm-order used to fire Purchase
+   * while window.fbq was still undefined — then sessionStorage blocked a
+   * retry. Queue until fbq exists, then flush.
+   */
+  function flushPendingMetaEvents() {
+    if (typeof window.fbq !== 'function') return;
+    var q = getPendingMetaEvents().slice();
+    try { window.__zappyPendingMetaEvents = []; } catch (e) {}
+    for (var i = 0; i < q.length; i++) {
+      var item = q[i];
+      if (!item || !item.eventName) continue;
+      if (item.orderId && alreadyFiredPurchaseMeta(item.orderId)) continue;
+      try {
+        window.fbq('track', item.eventName, item.params || {});
+        if (item.orderId) markPurchaseMetaFired(item.orderId);
+      } catch (e2) {}
+    }
+  }
+  window.zappyFlushPendingMetaEvents = flushPendingMetaEvents;
+
+  var metaFlushAttempts = 0;
+  var metaFlushTimer = setInterval(function() {
+    metaFlushAttempts++;
+    flushPendingMetaEvents();
+    var pendingLen = 0;
+    try { pendingLen = (window.__zappyPendingMetaEvents || []).length; } catch (e) {}
+    if ((pendingLen === 0 && typeof window.fbq === 'function') || metaFlushAttempts > 60) {
+      clearInterval(metaFlushTimer);
+    }
+  }, 500);
 
   /**
    * Fire a marketing event to first-party analytics + GA4/GTM/Meta when present.
@@ -431,15 +504,19 @@
         metadata.pagePath = pagePath();
       }
 
+      var oid = '';
+      var purchaseAlreadySent = false;
+      var purchaseMetaAlreadySent = false;
       if (eventId === 'checkout_complete') {
-        var oid = String(metadata.orderId || metadata.order_id || metadata.transaction_id || '');
-        if (oid && alreadyFiredPurchase(oid)) return;
-        if (oid) markPurchaseFired(oid);
+        oid = String(metadata.orderId || metadata.order_id || metadata.transaction_id || '');
+        purchaseAlreadySent = !!(oid && alreadyFiredPurchase(oid));
+        purchaseMetaAlreadySent = !!(oid && alreadyFiredPurchaseMeta(oid));
+        if (purchaseAlreadySent && purchaseMetaAlreadySent) return;
       }
 
       // First-party (skip when already tracked via zappyTrackEcomAnalytics path
       // that opts out, or when caller already recorded under a different name)
-      if (!opts.skipFirstParty) {
+      if (!opts.skipFirstParty && !purchaseAlreadySent) {
         try {
           if (window.zappyAnalytics && typeof window.zappyAnalytics.track === 'function') {
             window.zappyAnalytics.track(eventId, metadata);
@@ -448,40 +525,53 @@
       }
 
       // GTM / dataLayer — platform-standard ecommerce event names
-      try {
-        window.dataLayer = window.dataLayer || [];
-        if (plat.ecom) {
-          var ga4ForGtm = buildGa4Params(eventId, metadata);
-          var ecommerce = {};
-          if (ga4ForGtm.transaction_id) ecommerce.transaction_id = ga4ForGtm.transaction_id;
-          if (ga4ForGtm.value != null) ecommerce.value = ga4ForGtm.value;
-          if (ga4ForGtm.currency) ecommerce.currency = ga4ForGtm.currency;
-          if (ga4ForGtm.items) ecommerce.items = ga4ForGtm.items;
-          window.dataLayer.push({ event: plat.gtm, ecommerce: ecommerce });
-          // Secondary Zappy-specific trigger for merchants who want it
-          if (eventId === 'checkout_complete' || eventId === 'checkout_started') {
-            window.dataLayer.push({ event: eventId, ecommerce: ecommerce });
+      if (!purchaseAlreadySent) {
+        try {
+          window.dataLayer = window.dataLayer || [];
+          if (plat.ecom) {
+            var ga4ForGtm = buildGa4Params(eventId, metadata);
+            var ecommerce = {};
+            if (ga4ForGtm.transaction_id) ecommerce.transaction_id = ga4ForGtm.transaction_id;
+            if (ga4ForGtm.value != null) ecommerce.value = ga4ForGtm.value;
+            if (ga4ForGtm.currency) ecommerce.currency = ga4ForGtm.currency;
+            if (ga4ForGtm.items) ecommerce.items = ga4ForGtm.items;
+            window.dataLayer.push({ event: plat.gtm, ecommerce: ecommerce });
+            // Secondary Zappy-specific trigger for merchants who want it
+            if (eventId === 'checkout_complete' || eventId === 'checkout_started') {
+              window.dataLayer.push({ event: eventId, ecommerce: ecommerce });
+            }
+          } else {
+            var dl = { event: plat.gtm };
+            for (var k in metadata) {
+              if (Object.prototype.hasOwnProperty.call(metadata, k)) dl[k] = metadata[k];
+            }
+            window.dataLayer.push(dl);
           }
+        } catch (e2) {}
+
+        // GA4 gtag
+        try {
+          if (typeof window.gtag === 'function') {
+            window.gtag('event', plat.ga4, buildGa4Params(eventId, metadata));
+          }
+        } catch (e3) {}
+
+        if (oid) markPurchaseFired(oid);
+      }
+
+      // Meta Pixel — live sites lazy-load fbq after marketing consent. If the
+      // stub is not defined yet, queue and flush when the pixel arrives.
+      try {
+        if (purchaseMetaAlreadySent) {
+          // already delivered to Meta
         } else {
-          var dl = { event: plat.gtm };
-          for (var k in metadata) {
-            if (Object.prototype.hasOwnProperty.call(metadata, k)) dl[k] = metadata[k];
+          var metaParams = buildMetaParams(eventId, metadata);
+          if (typeof window.fbq === 'function') {
+            window.fbq('track', plat.meta, metaParams);
+            if (oid) markPurchaseMetaFired(oid);
+          } else {
+            enqueueMetaEvent(plat.meta, metaParams, eventId === 'checkout_complete' ? oid : null);
           }
-          window.dataLayer.push(dl);
-        }
-      } catch (e2) {}
-
-      // GA4 gtag
-      try {
-        if (typeof window.gtag === 'function') {
-          window.gtag('event', plat.ga4, buildGa4Params(eventId, metadata));
-        }
-      } catch (e3) {}
-
-      // Meta Pixel (only when fbq is loaded — consent-gated lazy loader)
-      try {
-        if (typeof window.fbq === 'function') {
-          window.fbq('track', plat.meta, buildMetaParams(eventId, metadata));
         }
       } catch (e4) {}
     } catch (err) {}
@@ -597,8 +687,165 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="תודה שפניתם אלינו">
     <meta name="twitter:description" content="טכנאי גז בירושלים - תודה שפניתם אלינו">
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LocalBusiness","@id":"https://gaz-technician-in-jerusalem.zappy5.app#organization","name":"טכנאי גז בירושלים","url":"https://gaz-technician-in-jerusalem.zappy5.app","description":"A gas technician service operating in Jerusalem and the surrounding area, focused on local residential and commercial clients. The website is a single landing page designed to drive immediate contact via WhatsApp and a floating call button, emphasizing quick accessibility and trust for urgent or routine gas-related needs.","address":{"@type":"PostalAddress","streetAddress":"ירושלים"},"contactPoint":[{"@type":"ContactPoint","contactType":"customer service","email":"dandavidcohen1@gamil.com","telephone":"+972559499173"}]},{"@type":"WebSite","@id":"https://gaz-technician-in-jerusalem.zappy5.app#website","url":"https://gaz-technician-in-jerusalem.zappy5.app","name":"טכנאי גז בירושלים","publisher":{"@id":"https://gaz-technician-in-jerusalem.zappy5.app#organization"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://gaz-technician-in-jerusalem.zappy5.app"},{"@type":"ListItem","position":2,"name":"Thank You","item":"https://gaz-technician-in-jerusalem.zappy5.app/thank-you"}]}]}</script>
-    <style>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LocalBusiness","@id":"https://gaz-technician-in-jerusalem.zappy5.app#organization","name":"טכנאי גז בירושלים","url":"https://gaz-technician-in-jerusalem.zappy5.app","description":"A gas technician service operating in Jerusalem and the surrounding area, focused on local residential and commercial clients. The website is a single landing page designed to drive immediate contact via WhatsApp and a floating call button, emphasizing quick accessibility and trust for urgent or routine gas-related needs.","address":{"@type":"PostalAddress","streetAddress":"7 אדמונד סחייק, ירושלים, 93133, ישראל"},"contactPoint":[{"@type":"ContactPoint","contactType":"customer service","email":"dandavidcohen1@gamil.com","telephone":"+972559499173"}]},{"@type":"WebSite","@id":"https://gaz-technician-in-jerusalem.zappy5.app#website","url":"https://gaz-technician-in-jerusalem.zappy5.app","name":"טכנאי גז בירושלים","publisher":{"@id":"https://gaz-technician-in-jerusalem.zappy5.app#organization"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://gaz-technician-in-jerusalem.zappy5.app"},{"@type":"ListItem","position":2,"name":"Thank You","item":"https://gaz-technician-in-jerusalem.zappy5.app/thank-you"}]}]}</script>
+    
+    <style id="zappy-critical-above-fold-css">
+html{box-sizing:border-box;-webkit-text-size-adjust:100%}*,*::before,*::after{box-sizing:inherit}body{margin:0;min-width:320px;overflow-x:clip}img,svg,video{max-width:100%;height:auto}main{display:block}.container{width:min(100% - 32px,1200px);margin-inline:auto}.navbar,nav.navbar,header .navbar,header[role="banner"]{position:relative;z-index:1000;width:100%}.nav-container,.navbar .container{display:flex;align-items:center;justify-content:space-between;min-height:64px}.logo,.logo-link img{display:block;width:35px;height:35px;object-fit:contain}.nav-menu,#navMenu{list-style:none;margin:0;padding:0}.navbar a,.nav-menu a,#navMenu a,.navbar .nav-links a{color:inherit;text-decoration:none}.navbar .sub-menu,.nav-menu .sub-menu,#navMenu .sub-menu{display:none}.fa,.fas,.far,.fab,.fa-solid,.fa-regular,.fa-brands{display:inline-block;min-width:1em;text-align:center}html:not(#zappy-noop)[data-zappy-site-type="ecommerce"] .phone-header-btn,html:not(#zappy-noop) .navbar:has(.nav-ecommerce-icons)>.phone-header-btn{display:none!important;visibility:hidden!important;width:0!important;height:0!important;pointer-events:none!important}.zappy-preview-empty-store-cta{display:none!important;visibility:hidden!important;height:0!important;max-height:0!important;overflow:hidden!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.zappy-catalog-menu{background:var(--surface-color,var(--surface,linear-gradient(135deg,#f8f9fa 0%,#fff 100%)));border-bottom:1px solid var(--border-color,#e5e7eb);padding:0;position:sticky;top:0;z-index:90}.zappy-catalog-menu[dir=rtl],.zappy-catalog-menu.rtl{direction:rtl}.zappy-catalog-menu[dir=ltr],.zappy-catalog-menu.ltr{direction:ltr}.catalog-menu-container{max-width:1440px;margin:0 auto;display:flex;align-items:center;gap:8px;padding:10px 24px;overflow:visible}.catalog-menu-categories,.catalog-menu-list{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:0;padding:0;list-style:none}.catalog-menu-item{display:inline-flex;align-items:center;padding:8px 16px;font-size:14px;font-weight:500;color:var(--text-color,var(--text,#374151));text-decoration:none;border-radius:20px;white-space:nowrap}.catalog-menu-all{background:var(--primary-color,var(--primary,#111));color:var(--text-light,#fff)!important}.catalog-menu-parent{position:relative;display:inline-flex;align-items:center}.catalog-menu-trigger{display:inline-flex;align-items:center;gap:6px}.catalog-menu-chevron{flex-shrink:0}.catalog-menu-parent>.sub-menu{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}.hero-section,.index-hero-section,section[class*="hero"]{position:relative;overflow:hidden}.hero-section,.index-hero-section{min-height:560px}section[data-hero-type*="fullscreen"]{min-height:100vh}.hero-bg-wrapper,.hero-bg-image,section[class*="hero"] [class*="hero-bg"]{position:absolute;inset:0;width:100%;height:100%}.hero-bg-wrapper img,.hero-bg-image img,section[class*="hero"] [data-hero-bg],section[class*="hero"] img[data-hero-background="true"]{width:100%!important;height:100%!important;object-fit:cover!important;display:block}.hero-content,section[class*="hero"] .container{position:relative;z-index:2}@media(max-width:768px){:root{--header-height:72px;--total-header-height:72px;--zappy-mobile-menu-top:72px}html[data-zappy-site-type="ecommerce"] body{padding-top:var(--total-header-height,72px)}html[data-zappy-site-type="ecommerce"] body>nav.navbar,html[data-zappy-site-type="ecommerce"] body>.navbar:not(.zappy-catalog-menu){position:fixed!important;top:0;left:0;right:0;z-index:100000;width:100%;margin-bottom:0}.zappy-catalog-menu{position:fixed;top:var(--header-height,72px);left:0;right:0;z-index:99999}.nav-container,.navbar .container{min-height:60px}.nav-menu,#navMenu{max-width:100vw;overflow-x:hidden}.hero-section,.index-hero-section,section[class*="hero"],section[data-hero-type*="fullscreen"]{min-height:100svh}.hero-bg-wrapper,.hero-bg-image,.hero-scrim{min-height:100svh}}
+:root{--nav-bg:#FFFFFF}.navbar{background-color:#FFFFFF!important}
+
+/* ZAPPY_ANNOUNCEMENT_HEADER_OFFSET_CSS_V3 */
+:root {
+  --zappy-header-stack-height: calc(var(--zappy-announcement-height, 40px) + var(--header-height, 72px));
+}
+body:has(.zappy-announcement-bar) nav.navbar:not(.zappy-catalog-menu),
+body:has(.zappy-announcement-bar) header.navbar,
+body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-search-panel) {
+  top: var(--zappy-announcement-height, 40px) !important;
+}
+
+
+
+/* ZAPPY_CONTENT_ALIGNMENT_FIRST_PAINT_CSS_V1 */
+[data-zappy-content-align] {
+  display: flex !important;
+  flex-direction: column !important;
+}
+[data-zappy-content-align^="top-"] { justify-content: flex-start !important; }
+[data-zappy-content-align^="upper-"],
+[data-zappy-content-align^="center-"],
+[data-zappy-content-align^="lower-"] { justify-content: center !important; }
+[data-zappy-content-align^="bottom-"] { justify-content: flex-end !important; }
+[data-zappy-content-align$="-left"],
+[data-zappy-content-align$="-mid-left"] {
+  align-items: flex-start !important;
+  text-align: start !important;
+}
+[data-zappy-content-align$="-center"] {
+  align-items: center !important;
+  text-align: center !important;
+}
+[data-zappy-content-align$="-right"],
+[data-zappy-content-align$="-mid-right"] {
+  align-items: flex-end !important;
+  text-align: end !important;
+}
+[data-zappy-content-align] [data-zappy-align-target] {
+  margin-left: auto;
+  margin-right: auto;
+}
+[data-zappy-content-align$="-center"] [data-zappy-align-target],
+[data-zappy-content-align$="-center"] [data-zappy-align-target] > * {
+  text-align: center !important;
+}
+
+</style>
+    <link rel="stylesheet" href="/styles.css">
+    <script>window.ZAPPY_WEBSITE_ID = "fee62a18-ed36-47d0-abb9-548b7196b8e8"; window.ZAPPY_API_BASE = "https://api.zappy5.com";</script>
+
+    <style id="zappy-dropdown-submenu-styles">
+      /* ========== DESKTOP DROPDOWN SUBMENU STYLES ========== */
+      /* Base styles for dropdown submenus - parent must be positioned */
+      .nav-menu li:has(.sub-menu), nav li:has(.sub-menu), .navbar li:has(.sub-menu), #navMenu li:has(.sub-menu) { position: relative; }
+      /* Submenu base - hidden by default */
+      .nav-menu .sub-menu, nav .sub-menu, .navbar .sub-menu, #navMenu .sub-menu { display: block !important; position: absolute !important; top: 100%; left: 0; min-width: 220px; border-radius: 8px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); padding: 8px 0; opacity: 0; visibility: hidden; transform: translateY(10px); transition: all 0.3s ease; z-index: 1000; list-style: none; pointer-events: none; }
+      /* CRITICAL: Desktop hover styles to show dropdown */
+      .nav-menu li:hover > .sub-menu, nav li:hover > .sub-menu, .navbar li:hover > .sub-menu, #navMenu li:hover > .sub-menu { opacity: 1 !important; visibility: visible !important; transform: translateY(0) !important; pointer-events: auto !important; }
+      /* Submenu item styling */
+      .sub-menu li { list-style: none; margin: 0; padding: 0; }
+      .sub-menu a { display: block !important; padding: 10px 16px !important; color: var(--text-dark, #333) !important; font-weight: 500; text-decoration: none; white-space: nowrap; transition: background-color 0.2s; }
+      .sub-menu .zappy-nav-child > a { padding-left: 28px !important; font-size: 0.9em !important; opacity: 0.85 !important; }
+      [dir="rtl"] .sub-menu .zappy-nav-child > a, html[lang="he"] .sub-menu .zappy-nav-child > a, html[lang="ar"] .sub-menu .zappy-nav-child > a { padding-left: 10px !important; padding-right: 28px !important; }
+      .sub-menu .zappy-nav-parent > a { font-weight: 600 !important; }
+      .sub-menu a:hover { background-color: #f5f5f5; }
+      /* RTL (Hebrew/Arabic) dropdown positioning */
+      [dir="rtl"] .nav-menu .sub-menu, [dir="rtl"] nav .sub-menu, [dir="rtl"] .navbar .sub-menu, html[lang="he"] .nav-menu .sub-menu, html[lang="he"] nav .sub-menu, html[lang="he"] .navbar .sub-menu, html[lang="ar"] .nav-menu .sub-menu, html[lang="ar"] nav .sub-menu, html[lang="ar"] .navbar .sub-menu { left: auto !important; right: 0 !important; }
+      /* Hide empty dropdown menus (exclude catalog sub-menus that use <a> children instead of <li>) */
+      .sub-menu:empty, .sub-menu:not(:has(li:not(.zappy-hidden-menu-item))):not(:has(> a)), .sub-menu:not(:has(li)):not(:has(> a)) { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }
+      /* Desktop: show submenu on Menu Group hover */
+      li:has(.menu-group-title):hover > .sub-menu { opacity: 1 !important; visibility: visible !important; transform: translateY(0) !important; pointer-events: auto !important; }
+      /* Menu Group title styling */
+      .nav-menu > li > .menu-group-title, #navMenu > li > .menu-group-title { display: inline-block; padding: 0.5rem 1rem; cursor: default; user-select: none; }
+      
+      /* ========== MOBILE SUBMENU STYLES ========== */
+      @media (max-width: 768px) {
+        .nav-menu .sub-menu, nav .sub-menu, .navbar .sub-menu, #navMenu .sub-menu { position: static !important; transform: none !important; box-shadow: none !important; background: transparent !important; max-height: 0; overflow: hidden; opacity: 0; visibility: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; padding: 0 !important; border-radius: 0 !important; }
+        .navbar .sub-menu.mobile-expanded, .nav-menu .sub-menu.mobile-expanded, #navMenu .sub-menu.mobile-expanded { max-height: none !important; overflow-y: visible !important; opacity: 1 !important; visibility: visible !important; padding: 8px 0 8px 16px !important; }
+        [dir="rtl"] .sub-menu.mobile-expanded, html[lang="he"] .sub-menu.mobile-expanded { padding: 8px 16px 8px 0 !important; }
+        /* Disable hover behavior on mobile */
+        .nav-menu li:hover > .sub-menu, nav li:hover > .sub-menu, .navbar li:hover > .sub-menu, #navMenu li:hover > .sub-menu { opacity: 0; visibility: hidden; pointer-events: none; }
+        .nav-menu li > .sub-menu.mobile-expanded, nav li > .sub-menu.mobile-expanded, .navbar li > .sub-menu.mobile-expanded, #navMenu li > .sub-menu.mobile-expanded { opacity: 1 !important; visibility: visible !important; pointer-events: auto !important; }
+        .nav-menu li:has(.sub-menu), nav li:has(.sub-menu), .navbar li:has(.sub-menu), #navMenu li:has(.sub-menu) { display: flex !important; flex-wrap: wrap !important; align-items: center !important; position: relative !important; min-height: 44px !important; }
+        .nav-menu li:has(.sub-menu) > a, nav li:has(.sub-menu) > a, .navbar li:has(.sub-menu) > a, #navMenu li:has(.sub-menu) > a { flex: 1 !important; min-width: 0 !important; }
+        .nav-menu li:has(.sub-menu) > .menu-group-title, nav li:has(.sub-menu) > .menu-group-title, .navbar li:has(.sub-menu) > .menu-group-title, #navMenu li:has(.sub-menu) > .menu-group-title { flex: 1 !important; min-width: 0 !important; display: flex !important; align-items: center !important; padding: 12px 16px !important; min-height: 44px !important; line-height: 1.4 !important; font-weight: 600 !important; box-sizing: border-box !important; }
+        .nav-menu li:has(.sub-menu) > .sub-menu, nav li:has(.sub-menu) > .sub-menu, .navbar li:has(.sub-menu) > .sub-menu, #navMenu li:has(.sub-menu) > .sub-menu { flex-basis: 100% !important; width: 100% !important; }
+        .nav-menu li:has(.sub-menu) > a [class*="chevron"], .nav-menu li:has(.sub-menu) > a [class*="arrow"], .nav-menu li:has(.sub-menu) > a .fa-chevron-down, .nav-menu li:has(.sub-menu) > a .fa-angle-down, nav li:has(.sub-menu) > a [class*="chevron"], nav li:has(.sub-menu) > a [class*="arrow"], #navMenu li:has(.sub-menu) > a [class*="chevron"], #navMenu li:has(.sub-menu) > a [class*="arrow"] { display: none !important; visibility: hidden !important; }
+        .mobile-submenu-toggle { display: flex !important; align-items: center !important; justify-content: center !important; width: 44px !important; height: auto !important; background: transparent !important; border: none !important; cursor: pointer !important; color: var(--text-dark) !important; position: static !important; flex-shrink: 0 !important; align-self: stretch !important; z-index: 2 !important; padding: 0 !important; margin: 0 !important; }
+        .mobile-submenu-toggle::after { content: '' !important; width: 0 !important; height: 0 !important; border-left: 6px solid transparent !important; border-right: 6px solid transparent !important; border-top: 7px solid currentColor !important; transition: transform 0.3s ease !important; }
+        .mobile-submenu-toggle.expanded::after { transform: rotate(180deg) !important; }
+        .sub-menu a { padding: 10px 0 !important; display: block !important; color: var(--text-dark) !important; white-space: normal !important; }
+        .sub-menu .zappy-nav-child > a { padding-left: 28px !important; font-size: 0.9em !important; opacity: 0.85 !important; }
+        [dir="rtl"] .sub-menu .zappy-nav-child > a, html[lang="he"] .sub-menu .zappy-nav-child > a, html[lang="ar"] .sub-menu .zappy-nav-child > a { padding-left: 0 !important; padding-right: 28px !important; }
+        .sub-menu .zappy-nav-parent > a { font-weight: 600 !important; }
+        .nav-menu.active, #navMenu.active { max-width: 100vw !important; overflow-x: hidden !important; box-sizing: border-box !important; }
+        .navbar .sub-menu li a, nav.navbar .sub-menu li a, .zappy-products-dropdown .sub-menu a { color: var(--text-dark) !important; }
+      }
+      @media (min-width: 769px) { .mobile-submenu-toggle { display: none !important; } }
+    </style>
+
+    <style id="zappy-widget-visibility">
+      html[dir="rtl"] .whatsapp-float { right: 20px !important; left: auto !important; }
+      html[dir="ltr"] .whatsapp-float, html:not([dir]) .whatsapp-float { left: 20px !important; right: auto !important; }
+      html[dir="rtl"] #mic-access-tool-general-button, html[dir="rtl"] .mic-access-tool-general-button,
+      html[dir="rtl"] #mic-init-access-tool .mic-access-tool-general-button,
+      html[dir="rtl"] #mic-init-access-tool #mic-access-tool-general-button,
+      html[dir="rtl"] ._access-icon { left: 20px !important; right: auto !important; }
+      html[dir="ltr"] #mic-access-tool-general-button, html[dir="ltr"] .mic-access-tool-general-button,
+      html[dir="ltr"] #mic-init-access-tool .mic-access-tool-general-button,
+      html[dir="ltr"] #mic-init-access-tool #mic-access-tool-general-button,
+      html[dir="ltr"] ._access-icon,
+      html:not([dir]) #mic-access-tool-general-button, html:not([dir]) .mic-access-tool-general-button,
+      html:not([dir]) #mic-init-access-tool .mic-access-tool-general-button,
+      html:not([dir]) #mic-init-access-tool #mic-access-tool-general-button,
+      html:not([dir]) ._access-icon { right: 20px !important; left: auto !important; }
+      @media (max-width: 768px) { .whatsapp-float { display: flex !important; } }
+      @media (min-width: 769px) { .whatsapp-float { display: flex !important; } }
+      @media (max-width: 768px) {
+        #mic-access-tool-general-button, .mic-access-tool-general-button,
+        #mic-init-access-tool .mic-access-tool-general-button, #mic-init-access-tool #mic-access-tool-general-button,
+        ._access-icon { display: flex !important; visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; }
+        #mic-access-tool-box.opened-mic-access-tool, .mic-access-tool-box.opened-mic-access-tool,
+        #mic-init-access-tool #mic-access-tool-box.opened-mic-access-tool {
+          visibility: visible !important; opacity: 1 !important; pointer-events: auto !important;
+        }
+      }
+      @media (min-width: 769px) {
+        #mic-access-tool-general-button, .mic-access-tool-general-button,
+        #mic-init-access-tool .mic-access-tool-general-button, #mic-init-access-tool #mic-access-tool-general-button,
+        ._access-icon { display: flex !important; visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; }
+        #mic-access-tool-box.opened-mic-access-tool, .mic-access-tool-box.opened-mic-access-tool,
+        #mic-init-access-tool #mic-access-tool-box.opened-mic-access-tool {
+          visibility: visible !important; opacity: 1 !important; pointer-events: auto !important;
+        }
+      }
+    </style>
+</head>
+<body>
+<meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>תודה שפניתם אלינו</title>
+  <meta name="description" content="טכנאי גז ב7 אדמונד סחייק, 7 אדמונד סחייק, 7 אדמונד סחייק, ירושלים, 93133, ישראל, 93133, ישראל, 93133, ישראל - תודה שפניתם אלינו">
+  <meta name="keywords" content="טכנאי גז ב7 אדמונד סחייק, 7 אדמונד סחייק, 7 אדמונד סחייק, ירושלים, 93133, ישראל, 93133, ישראל, 93133, ישראל, התקנת גז ביתי 7 אדמונד סחייק, 7 אדמונד סחייק, 7 אדמונד סחייק, ירושלים, 93133, ישראל, 93133, ישראל, 93133, ישראל, בדיקת תקינות גז לדירה, חיבור גז לכיריים 7 אדמונד סחייק, 7 אדמונד סחייק, 7 אדמונד סחייק, ירושלים, 93133, ישראל, 93133, ישראל, 93133, ישראל, גז 7 אדמונד סחייק, 7 אדמונד סחייק, 7 אדמונד סחייק, ירושלים, 93133, ישראל, 93133, ישראל, 93133, ישראל">
+  <meta name="robots" content="index, follow">
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <style>
     .skip-link { position: absolute; top: 0; left: 0; transform: translateY(-200%); padding: 12px 18px; background: var(--bg-dark, #1a1a1a); color: var(--text-light, #fff); font-weight: 600; border-radius: 0 0 8px 0; z-index: 10000; }
     .skip-link:focus { transform: none; outline: 2px solid var(--ring, #fff); outline-offset: 2px; }
     :focus-visible { outline: 2px solid var(--ring, currentColor); outline-offset: 3px; }
@@ -620,14 +867,14 @@
 
     <!-- Open Graph / Social Media Meta Tags -->
     <meta property="og:type" content="article">
-    
-    
+    <meta property="og:title" content="תודה שפניתם אלינו">
+    <meta property="og:description" content="טכנאי גז ב7 אדמונד סחייק, 7 אדמונד סחייק, 7 אדמונד סחייק, ירושלים, 93133, ישראל, 93133, ישראל, 93133, ישראל - תודה שפניתם אלינו">
     
     <meta property="og:locale" content="en_US">
     <!-- Twitter Card Meta Tags -->
-    
-    
-    
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="תודה שפניתם אלינו">
+    <meta name="twitter:description" content="טכנאי גז ב7 אדמונד סחייק, 7 אדמונד סחייק, 7 אדמונד סחייק, ירושלים, 93133, ישראל, 93133, ישראל, 93133, ישראל - תודה שפניתם אלינו">
     <style id="zappy-ai-page-styles">.thank-you-hero-section {
   position: relative;
   display: flex;
@@ -835,149 +1082,7 @@
 @media (max-width: 768px) {
   .hero h1, .hero-section h1, [class*="hero-"] h1, [class~="hero"] h1, .hero .hero-title, .hero-title { font-size: 28px !important; }
 }
-</style>
-    <style id="zappy-critical-above-fold-css">
-html{box-sizing:border-box;-webkit-text-size-adjust:100%}*,*::before,*::after{box-sizing:inherit}body{margin:0;min-width:320px;overflow-x:clip}img,svg,video{max-width:100%;height:auto}main{display:block}.container{width:min(100% - 32px,1200px);margin-inline:auto}.navbar,nav.navbar,header .navbar,header[role="banner"]{position:relative;z-index:1000;width:100%}.nav-container,.navbar .container{display:flex;align-items:center;justify-content:space-between;min-height:64px}.logo,.logo-link img{display:block;width:35px;height:35px;object-fit:contain}.nav-menu,#navMenu{list-style:none;margin:0;padding:0}.navbar a,.nav-menu a,#navMenu a,.navbar .nav-links a{color:inherit;text-decoration:none}.navbar .sub-menu,.nav-menu .sub-menu,#navMenu .sub-menu{display:none}.fa,.fas,.far,.fab,.fa-solid,.fa-regular,.fa-brands{display:inline-block;min-width:1em;text-align:center}html:not(#zappy-noop)[data-zappy-site-type="ecommerce"] .phone-header-btn,html:not(#zappy-noop) .navbar:has(.nav-ecommerce-icons)>.phone-header-btn{display:none!important;visibility:hidden!important;width:0!important;height:0!important;pointer-events:none!important}.zappy-preview-empty-store-cta{display:none!important;visibility:hidden!important;height:0!important;max-height:0!important;overflow:hidden!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.zappy-catalog-menu{background:var(--surface-color,var(--surface,linear-gradient(135deg,#f8f9fa 0%,#fff 100%)));border-bottom:1px solid var(--border-color,#e5e7eb);padding:0;position:sticky;top:0;z-index:90}.zappy-catalog-menu[dir=rtl],.zappy-catalog-menu.rtl{direction:rtl}.zappy-catalog-menu[dir=ltr],.zappy-catalog-menu.ltr{direction:ltr}.catalog-menu-container{max-width:1440px;margin:0 auto;display:flex;align-items:center;gap:8px;padding:10px 24px;overflow:visible}.catalog-menu-categories,.catalog-menu-list{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:0;padding:0;list-style:none}.catalog-menu-item{display:inline-flex;align-items:center;padding:8px 16px;font-size:14px;font-weight:500;color:var(--text-color,var(--text,#374151));text-decoration:none;border-radius:20px;white-space:nowrap}.catalog-menu-all{background:var(--primary-color,var(--primary,#111));color:var(--text-light,#fff)!important}.catalog-menu-parent{position:relative;display:inline-flex;align-items:center}.catalog-menu-trigger{display:inline-flex;align-items:center;gap:6px}.catalog-menu-chevron{flex-shrink:0}.catalog-menu-parent>.sub-menu{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}.hero-section,.index-hero-section,section[class*="hero"]{position:relative;overflow:hidden}.hero-section,.index-hero-section{min-height:560px}section[data-hero-type*="fullscreen"]{min-height:100vh}.hero-bg-wrapper,.hero-bg-image,section[class*="hero"] [class*="hero-bg"]{position:absolute;inset:0;width:100%;height:100%}.hero-bg-wrapper img,.hero-bg-image img,section[class*="hero"] [data-hero-bg],section[class*="hero"] img[data-hero-background="true"]{width:100%!important;height:100%!important;object-fit:cover!important;display:block}.hero-content,section[class*="hero"] .container{position:relative;z-index:2}@media(max-width:768px){:root{--header-height:72px;--total-header-height:72px;--zappy-mobile-menu-top:72px}html[data-zappy-site-type="ecommerce"] body{padding-top:var(--total-header-height,72px)}html[data-zappy-site-type="ecommerce"] body>nav.navbar,html[data-zappy-site-type="ecommerce"] body>.navbar:not(.zappy-catalog-menu){position:fixed!important;top:0;left:0;right:0;z-index:100000;width:100%;margin-bottom:0}.zappy-catalog-menu{position:fixed;top:var(--header-height,72px);left:0;right:0;z-index:99999}.nav-container,.navbar .container{min-height:60px}.nav-menu,#navMenu{max-width:100vw;overflow-x:hidden}.hero-section,.index-hero-section,section[class*="hero"],section[data-hero-type*="fullscreen"]{min-height:100svh}.hero-bg-wrapper,.hero-bg-image,.hero-scrim{min-height:100svh}}
-:root{--nav-bg:#FFFFFF}.navbar{background-color:#FFFFFF!important}
-
-/* ZAPPY_ANNOUNCEMENT_HEADER_OFFSET_CSS_V3 */
-:root {
-  --zappy-header-stack-height: calc(var(--zappy-announcement-height, 40px) + var(--header-height, 72px));
-}
-body:has(.zappy-announcement-bar) nav.navbar:not(.zappy-catalog-menu),
-body:has(.zappy-announcement-bar) header.navbar,
-body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-search-panel) {
-  top: var(--zappy-announcement-height, 40px) !important;
-}
-
-
-
-/* ZAPPY_CONTENT_ALIGNMENT_FIRST_PAINT_CSS_V1 */
-[data-zappy-content-align] {
-  display: flex !important;
-  flex-direction: column !important;
-}
-[data-zappy-content-align^="top-"] { justify-content: flex-start !important; }
-[data-zappy-content-align^="upper-"],
-[data-zappy-content-align^="center-"],
-[data-zappy-content-align^="lower-"] { justify-content: center !important; }
-[data-zappy-content-align^="bottom-"] { justify-content: flex-end !important; }
-[data-zappy-content-align$="-left"],
-[data-zappy-content-align$="-mid-left"] {
-  align-items: flex-start !important;
-  text-align: start !important;
-}
-[data-zappy-content-align$="-center"] {
-  align-items: center !important;
-  text-align: center !important;
-}
-[data-zappy-content-align$="-right"],
-[data-zappy-content-align$="-mid-right"] {
-  align-items: flex-end !important;
-  text-align: end !important;
-}
-[data-zappy-content-align] [data-zappy-align-target] {
-  margin-left: auto;
-  margin-right: auto;
-}
-[data-zappy-content-align$="-center"] [data-zappy-align-target],
-[data-zappy-content-align$="-center"] [data-zappy-align-target] > * {
-  text-align: center !important;
-}
-
-</style>
-    <link rel="stylesheet" href="/styles.css">
-    <script>window.ZAPPY_WEBSITE_ID = "fee62a18-ed36-47d0-abb9-548b7196b8e8"; window.ZAPPY_API_BASE = "https://api.zappy5.com";</script>
-
-    <style id="zappy-dropdown-submenu-styles">
-      /* ========== DESKTOP DROPDOWN SUBMENU STYLES ========== */
-      /* Base styles for dropdown submenus - parent must be positioned */
-      .nav-menu li:has(.sub-menu), nav li:has(.sub-menu), .navbar li:has(.sub-menu), #navMenu li:has(.sub-menu) { position: relative; }
-      /* Submenu base - hidden by default */
-      .nav-menu .sub-menu, nav .sub-menu, .navbar .sub-menu, #navMenu .sub-menu { display: block !important; position: absolute !important; top: 100%; left: 0; min-width: 220px; border-radius: 8px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); padding: 8px 0; opacity: 0; visibility: hidden; transform: translateY(10px); transition: all 0.3s ease; z-index: 1000; list-style: none; pointer-events: none; }
-      /* CRITICAL: Desktop hover styles to show dropdown */
-      .nav-menu li:hover > .sub-menu, nav li:hover > .sub-menu, .navbar li:hover > .sub-menu, #navMenu li:hover > .sub-menu { opacity: 1 !important; visibility: visible !important; transform: translateY(0) !important; pointer-events: auto !important; }
-      /* Submenu item styling */
-      .sub-menu li { list-style: none; margin: 0; padding: 0; }
-      .sub-menu a { display: block !important; padding: 10px 16px !important; color: var(--text-dark, #333) !important; font-weight: 500; text-decoration: none; white-space: nowrap; transition: background-color 0.2s; }
-      .sub-menu .zappy-nav-child > a { padding-left: 28px !important; font-size: 0.9em !important; opacity: 0.85 !important; }
-      [dir="rtl"] .sub-menu .zappy-nav-child > a, html[lang="he"] .sub-menu .zappy-nav-child > a, html[lang="ar"] .sub-menu .zappy-nav-child > a { padding-left: 10px !important; padding-right: 28px !important; }
-      .sub-menu .zappy-nav-parent > a { font-weight: 600 !important; }
-      .sub-menu a:hover { background-color: #f5f5f5; }
-      /* RTL (Hebrew/Arabic) dropdown positioning */
-      [dir="rtl"] .nav-menu .sub-menu, [dir="rtl"] nav .sub-menu, [dir="rtl"] .navbar .sub-menu, html[lang="he"] .nav-menu .sub-menu, html[lang="he"] nav .sub-menu, html[lang="he"] .navbar .sub-menu, html[lang="ar"] .nav-menu .sub-menu, html[lang="ar"] nav .sub-menu, html[lang="ar"] .navbar .sub-menu { left: auto !important; right: 0 !important; }
-      /* Hide empty dropdown menus (exclude catalog sub-menus that use <a> children instead of <li>) */
-      .sub-menu:empty, .sub-menu:not(:has(li:not(.zappy-hidden-menu-item))):not(:has(> a)), .sub-menu:not(:has(li)):not(:has(> a)) { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }
-      /* Desktop: show submenu on Menu Group hover */
-      li:has(.menu-group-title):hover > .sub-menu { opacity: 1 !important; visibility: visible !important; transform: translateY(0) !important; pointer-events: auto !important; }
-      /* Menu Group title styling */
-      .nav-menu > li > .menu-group-title, #navMenu > li > .menu-group-title { display: inline-block; padding: 0.5rem 1rem; cursor: default; user-select: none; }
-      
-      /* ========== MOBILE SUBMENU STYLES ========== */
-      @media (max-width: 768px) {
-        .nav-menu .sub-menu, nav .sub-menu, .navbar .sub-menu, #navMenu .sub-menu { position: static !important; transform: none !important; box-shadow: none !important; background: transparent !important; max-height: 0; overflow: hidden; opacity: 0; visibility: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; padding: 0 !important; border-radius: 0 !important; }
-        .navbar .sub-menu.mobile-expanded, .nav-menu .sub-menu.mobile-expanded, #navMenu .sub-menu.mobile-expanded { max-height: none !important; overflow-y: visible !important; opacity: 1 !important; visibility: visible !important; padding: 8px 0 8px 16px !important; }
-        [dir="rtl"] .sub-menu.mobile-expanded, html[lang="he"] .sub-menu.mobile-expanded { padding: 8px 16px 8px 0 !important; }
-        /* Disable hover behavior on mobile */
-        .nav-menu li:hover > .sub-menu, nav li:hover > .sub-menu, .navbar li:hover > .sub-menu, #navMenu li:hover > .sub-menu { opacity: 0; visibility: hidden; pointer-events: none; }
-        .nav-menu li > .sub-menu.mobile-expanded, nav li > .sub-menu.mobile-expanded, .navbar li > .sub-menu.mobile-expanded, #navMenu li > .sub-menu.mobile-expanded { opacity: 1 !important; visibility: visible !important; pointer-events: auto !important; }
-        .nav-menu li:has(.sub-menu), nav li:has(.sub-menu), .navbar li:has(.sub-menu), #navMenu li:has(.sub-menu) { display: flex !important; flex-wrap: wrap !important; align-items: center !important; position: relative !important; min-height: 44px !important; }
-        .nav-menu li:has(.sub-menu) > a, nav li:has(.sub-menu) > a, .navbar li:has(.sub-menu) > a, #navMenu li:has(.sub-menu) > a { flex: 1 !important; min-width: 0 !important; }
-        .nav-menu li:has(.sub-menu) > .menu-group-title, nav li:has(.sub-menu) > .menu-group-title, .navbar li:has(.sub-menu) > .menu-group-title, #navMenu li:has(.sub-menu) > .menu-group-title { flex: 1 !important; min-width: 0 !important; display: flex !important; align-items: center !important; padding: 12px 16px !important; min-height: 44px !important; line-height: 1.4 !important; font-weight: 600 !important; box-sizing: border-box !important; }
-        .nav-menu li:has(.sub-menu) > .sub-menu, nav li:has(.sub-menu) > .sub-menu, .navbar li:has(.sub-menu) > .sub-menu, #navMenu li:has(.sub-menu) > .sub-menu { flex-basis: 100% !important; width: 100% !important; }
-        .nav-menu li:has(.sub-menu) > a [class*="chevron"], .nav-menu li:has(.sub-menu) > a [class*="arrow"], .nav-menu li:has(.sub-menu) > a .fa-chevron-down, .nav-menu li:has(.sub-menu) > a .fa-angle-down, nav li:has(.sub-menu) > a [class*="chevron"], nav li:has(.sub-menu) > a [class*="arrow"], #navMenu li:has(.sub-menu) > a [class*="chevron"], #navMenu li:has(.sub-menu) > a [class*="arrow"] { display: none !important; visibility: hidden !important; }
-        .mobile-submenu-toggle { display: flex !important; align-items: center !important; justify-content: center !important; width: 44px !important; height: auto !important; background: transparent !important; border: none !important; cursor: pointer !important; color: var(--text-dark) !important; position: static !important; flex-shrink: 0 !important; align-self: stretch !important; z-index: 2 !important; padding: 0 !important; margin: 0 !important; }
-        .mobile-submenu-toggle::after { content: '' !important; width: 0 !important; height: 0 !important; border-left: 6px solid transparent !important; border-right: 6px solid transparent !important; border-top: 7px solid currentColor !important; transition: transform 0.3s ease !important; }
-        .mobile-submenu-toggle.expanded::after { transform: rotate(180deg) !important; }
-        .sub-menu a { padding: 10px 0 !important; display: block !important; color: var(--text-dark) !important; white-space: normal !important; }
-        .sub-menu .zappy-nav-child > a { padding-left: 28px !important; font-size: 0.9em !important; opacity: 0.85 !important; }
-        [dir="rtl"] .sub-menu .zappy-nav-child > a, html[lang="he"] .sub-menu .zappy-nav-child > a, html[lang="ar"] .sub-menu .zappy-nav-child > a { padding-left: 0 !important; padding-right: 28px !important; }
-        .sub-menu .zappy-nav-parent > a { font-weight: 600 !important; }
-        .nav-menu.active, #navMenu.active { max-width: 100vw !important; overflow-x: hidden !important; box-sizing: border-box !important; }
-        .navbar .sub-menu li a, nav.navbar .sub-menu li a, .zappy-products-dropdown .sub-menu a { color: var(--text-dark) !important; }
-      }
-      @media (min-width: 769px) { .mobile-submenu-toggle { display: none !important; } }
-    </style>
-
-    <style id="zappy-widget-visibility">
-      html[dir="rtl"] .whatsapp-float { right: 20px !important; left: auto !important; }
-      html[dir="ltr"] .whatsapp-float, html:not([dir]) .whatsapp-float { left: 20px !important; right: auto !important; }
-      html[dir="rtl"] #mic-access-tool-general-button, html[dir="rtl"] .mic-access-tool-general-button,
-      html[dir="rtl"] #mic-init-access-tool .mic-access-tool-general-button,
-      html[dir="rtl"] #mic-init-access-tool #mic-access-tool-general-button,
-      html[dir="rtl"] ._access-icon { left: 20px !important; right: auto !important; }
-      html[dir="ltr"] #mic-access-tool-general-button, html[dir="ltr"] .mic-access-tool-general-button,
-      html[dir="ltr"] #mic-init-access-tool .mic-access-tool-general-button,
-      html[dir="ltr"] #mic-init-access-tool #mic-access-tool-general-button,
-      html[dir="ltr"] ._access-icon,
-      html:not([dir]) #mic-access-tool-general-button, html:not([dir]) .mic-access-tool-general-button,
-      html:not([dir]) #mic-init-access-tool .mic-access-tool-general-button,
-      html:not([dir]) #mic-init-access-tool #mic-access-tool-general-button,
-      html:not([dir]) ._access-icon { right: 20px !important; left: auto !important; }
-      @media (max-width: 768px) { .whatsapp-float { display: flex !important; } }
-      @media (min-width: 769px) { .whatsapp-float { display: flex !important; } }
-      @media (max-width: 768px) {
-        #mic-access-tool-general-button, .mic-access-tool-general-button,
-        #mic-init-access-tool .mic-access-tool-general-button, #mic-init-access-tool #mic-access-tool-general-button,
-        ._access-icon { display: flex !important; visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; }
-        #mic-access-tool-box.opened-mic-access-tool, .mic-access-tool-box.opened-mic-access-tool,
-        #mic-init-access-tool #mic-access-tool-box.opened-mic-access-tool {
-          visibility: visible !important; opacity: 1 !important; pointer-events: auto !important;
-        }
-      }
-      @media (min-width: 769px) {
-        #mic-access-tool-general-button, .mic-access-tool-general-button,
-        #mic-init-access-tool .mic-access-tool-general-button, #mic-init-access-tool #mic-access-tool-general-button,
-        ._access-icon { display: flex !important; visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; }
-        #mic-access-tool-box.opened-mic-access-tool, .mic-access-tool-box.opened-mic-access-tool,
-        #mic-init-access-tool #mic-access-tool-box.opened-mic-access-tool {
-          visibility: visible !important; opacity: 1 !important; pointer-events: auto !important;
-        }
-      }
-    </style>
-</head>
-<body>
-<a class="skip-link" href="/#main">דלג לתוכן הראשי</a>
+</style><a class="skip-link" href="/#main">דלג לתוכן הראשי</a>
   <nav class="navbar" dir="rtl">
   <!-- Mobile buttons: MUST be direct children of .navbar (outside nav-container) -->
   <button class="mobile-toggle" id="mobileToggle" aria-label="Menu">
@@ -998,7 +1103,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
   <!-- nav-container: REQUIRED wrapper for layout elements (brand, menu, CTA) -->
   <div class="nav-container">
     <div class="nav-right-group"><div class="nav-brand">
-      <a href="/" class="logo-link"><img class="logo" src="/assets/site-image-image-1.webp" alt="טכנאי גז בירושלים" decoding="async" width="35" height="35"></a>
+      <a href="/" class="logo-link"><img class="logo" src="/assets/site-image-image-1.webp" alt="טכנאי גז ב7 אדמונד סחייק, 7 אדמונד סחייק, 7 אדמונד סחייק, ירושלים, 93133, ישראל, 93133, ישראל, 93133, ישראל" decoding="async" width="35" height="35"></a>
     </div><ul class="nav-menu" id="navMenu"><li><a href="/#services">שירותים</a></li><li><a href="/#benefits">יתרונות</a></li><li><a href="/#trust-signals">למה לסמוך עלינו</a></li><li><a href="/#testimonials">המלצות</a></li><li><a href="/#service-area">איזור שירות</a></li><li><a href="/#faq">שאלות נפוצות</a></li><li class="mobile-contact-link nav-cta-mobile-item"><a href="/#cta" class="nav-cta-btn">צור קשר</a></li></ul></div>
     
     
@@ -1497,8 +1602,8 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
     <div class="footer-grid">
       <!-- Company Info -->
       <div class="footer-col footer-company-col">
-        <img src="/assets/image-home-services-gas-technician-logo.webp" alt="טכנאי גז בירושלים" class="logo" data-element-type="image" data-element-id="img-1784762321861-y52128hct" data-zappy-footer-image="true" decoding="async" width="35" height="35">
-        <p class="footer-tagline">שירותי גז מקצועיים ואמינים בירושלים והסביבה. בטיחות, ניסיון וזמינות 24/6.</p>
+        <img src="/assets/image-home-services-gas-technician-logo.webp" alt="טכנאי גז ב7 אדמונד סחייק, 7 אדמונד סחייק, 7 אדמונד סחייק, ירושלים, 93133, ישראל, 93133, ישראל, 93133, ישראל" class="logo" data-element-type="image" data-element-id="img-1784762321861-y52128hct" data-zappy-footer-image="true" decoding="async" width="35" height="35">
+        <p class="footer-tagline">7 אדמונד סחייק, 7 אדמונד סחייק, 7 אדמונד סחייק, ירושלים, 93133, ישראל, 93133, ישראל, 93133, ישראל</p>
       </div>
 
       <!-- Quick Links -->
@@ -1523,15 +1628,14 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
           </li><li>
             <span class="contact-icon"><i class="fas fa-phone" data-element-type="icon" data-element-id="icon-1784762321852-xxo5ppq89" data-icon-type="fontawesome" style="cursor: pointer;"></i></span>
             <span class="contact-text"><a href="tel:+972559499173">055-</a>9499173 (דן)</span>
-          </li><li><a href="https://www.google.com/maps/search/?api=1&amp;query=%D7%99%D7%A8%D7%95%D7%A9%D7%9C%D7%99%D7%9D" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:flex-start;gap:inherit"><span class="contact-icon"><i class="fas fa-map-marker-alt" data-element-type="icon" data-element-id="icon-1784762321852-rzz9h6kqu" data-icon-type="fontawesome" style="cursor: pointer;"></i></span>
-            <span class="contact-text">ירושלים</span></a></li></ul>
+          </li><li><a href="https://www.google.com/maps/search/?api=1&amp;query=7%20%D7%90%D7%93%D7%9E%D7%95%D7%A0%D7%93%20%D7%A1%D7%97%D7%99%D7%99%D7%A7%2C%20%D7%99%D7%A8%D7%95%D7%A9%D7%9C%D7%99%D7%9D%2C%2093133%2C%20%D7%99%D7%A9%D7%A8%D7%90%D7%9C" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:flex-start;gap:inherit"><span class="contact-icon"><i class="fas fa-map-marker-alt" data-element-type="icon" data-element-id="icon-1784762321852-rzz9h6kqu" data-icon-type="fontawesome" style="cursor: pointer;"></i></span>
+            <span class="contact-text">7 אדמונד סחייק, ירושלים, 93133, ישראל</span></a></li></ul>
       </div>
 
       <!-- Business Hours -->
-      <div class="footer-col footer-hours-col zappy-hours-hidden" style="display: none">
+      <div class="footer-col footer-hours-col">
         <h4>שעות פעילות</h4>
-        <ul class="footer-hours"><li><a href="/"><span class="hours-day">יום א’</span> <span class="hours-time">סגור</span></a></li>
-<li><a href="/"><span class="hours-day">ימים ב’–ו’</span> <span class="hours-time">09:00–17:00</span></a></li>
+        <ul class="footer-hours"><li><a href="/"><span class="hours-day">ימים א’–ו’</span> <span class="hours-time">09:00–17:00</span></a></li>
 <li><a href="/"><span class="hours-day">שבת</span> <span class="hours-time">סגור</span></a></li></ul>
       </div>
 
@@ -1539,8 +1643,8 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
       <div class="footer-col footer-social-col">
         <h4>עקבו אחרינו</h4>
         <div class="footer-social">
-          <a href="#" aria-label="Facebook" data-zappy-social-placeholder="true"><i class="fab fa-facebook-f"></i></a>
-          <a href="#" aria-label="Instagram" data-zappy-social-placeholder="true"><i class="fab fa-instagram" data-element-type="icon" data-element-id="icon-1784762321852-nefyodkpv" data-icon-type="fontawesome"></i></a>
+          <a href="#" aria-label="Facebook" data-zappy-social-placeholder="true" style="display:none !important;"><i class="fab fa-facebook-f"></i></a>
+          <a href="#" aria-label="Instagram" data-zappy-social-placeholder="true" style="display:none !important;"><i class="fab fa-instagram" data-element-type="icon" data-element-id="icon-1784762321852-nefyodkpv" data-icon-type="fontawesome"></i></a>
           <a href="https://wa.me/972559499173" aria-label="WhatsApp" data-zappy-social-placeholder="true"><i class="fab fa-whatsapp" data-element-type="icon" data-element-id="icon-1784762321852-alzth9alc" data-icon-type="fontawesome"></i></a>
         </div>
       </div>
@@ -1549,7 +1653,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
     <!-- Bottom Bar -->
     <div class="footer-bottom">
       <div class="footer-copyright">
-        <span>© 2026 טכנאי גז בירושלים. כל הזכויות שמורות.</span>
+        <span>© 2026 טכנאי גז ב7 אדמונד סחייק, 7 אדמונד סחייק, 7 אדמונד סחייק, ירושלים, 93133, ישראל, 93133, ישראל, 93133, ישראל. כל הזכויות שמורות.</span>
       </div>
       <div class="footer-legal">
         <a href="/privacy">מדיניות פרטיות</a>

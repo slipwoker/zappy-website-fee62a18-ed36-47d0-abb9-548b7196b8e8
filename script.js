@@ -2700,8 +2700,11 @@ if (document.readyState === 'complete') {
       if (toggle.__zappyMobileToggleBound) return;
       toggle.__zappyMobileToggleBound = true;
 
-      // Repair baked open-icon styles when the menu is actually closed.
-      if (!menuIsOpen(navMenu)) setClosedIcons(toggle);
+      // Always start closed. A save while the overlay was open bakes
+      // .nav-menu.active into HTML; repairing icons alone leaves the panel up.
+      closeMenu(navMenu);
+      setClosedIcons(toggle);
+      document.body.style.overflow = '';
 
       toggle.addEventListener('click', function(e) {
         e.preventDefault();
@@ -5822,6 +5825,12 @@ function fixContrast(){
   // expands .sub-menu.mobile-expanded, and our V5 ensureRuntimeCssInjected
   // pins the button to the far edge of the row (right in LTR, left in RTL).
   // Above 768px we tear it back down so the desktop hover dropdown is intact.
+  // normalizeMobileSubmenuLayout writes inline !important locks (display /
+  // visibility / height / position / …). Those beat stylesheet :hover
+  // flyouts, so desktop teardown MUST remove them — not just the toggle
+  // and .mobile-expanded class. Otherwise a visit below 768px (or a
+  // resize/rotate across the breakpoint) leaves dropdowns hidden or stuck
+  // in-flow.
   function ensureMobileSubmenuToggles() {
     var isMobile = window.matchMedia ? window.matchMedia('(max-width: 768px)').matches : window.innerWidth <= 768;
 
@@ -5836,6 +5845,7 @@ function fixContrast(){
         arrow.style.display = '';
         arrow.removeAttribute('data-zappy-mobile-hidden');
       });
+      clearMobileSubmenuLayoutLocks();
       return;
     }
 
@@ -5896,11 +5906,59 @@ function fixContrast(){
   function setImportant(el, prop, value) {
     if (!el || !el.style || !el.style.setProperty) return;
     el.style.setProperty(prop, value, 'important');
+    if (!el.setAttribute) return;
+    el.setAttribute('data-zappy-mobile-layout-lock', '1');
+    // Record each property THIS lock wrote. Desktop teardown must not
+    // removeProperty a name we never set — that races the transparent-
+    // navbar scroll helper's inline frosted color on Products triggers.
+    var recorded = (el.getAttribute('data-zappy-mobile-layout-lock-props') || '');
+    var written = recorded ? recorded.split(',') : [];
+    if (written.indexOf(prop) === -1) {
+      written.push(prop);
+      el.setAttribute('data-zappy-mobile-layout-lock-props', written.join(','));
+    }
+  }
+
+  function clearImportant(el, props) {
+    if (!el || !el.style || !el.style.removeProperty) return;
+    for (var i = 0; i < props.length; i++) el.style.removeProperty(props[i]);
+  }
+
+  // Allowlist of properties normalizeMobileSubmenuLayout may lock.
+  // Teardown intersects the per-element recorded list with this — never
+  // a blanket wipe. A full-list removeProperty also dropped inline
+  // color the scroll helper (sTC) set on dropdown triggers, so a
+  // mobile→desktop resize lost frosted contrast until the next scroll.
+  var MOBILE_SUBMENU_LOCK_PROPS = [
+    'align-items', 'background', 'border', 'box-sizing', 'color', 'direction',
+    'display', 'flex', 'flex-wrap', 'font-size', 'font-weight', 'height',
+    'inset-inline-end', 'inset-inline-start', 'justify-content', 'left',
+    'line-height', 'margin', 'max-height', 'max-width', 'min-height',
+    'min-width', 'opacity', 'order', 'overflow', 'overflow-wrap', 'padding',
+    'padding-left', 'padding-right', 'pointer-events', 'position', 'right',
+    'text-align', 'transform', 'visibility', 'white-space', 'width'
+  ];
+
+  function clearMobileSubmenuLayoutLocks() {
+    document.querySelectorAll('[data-zappy-mobile-layout-lock="1"]').forEach(function(el) {
+      var recorded = (el.getAttribute('data-zappy-mobile-layout-lock-props') || '').split(',');
+      var written = [];
+      for (var i = 0; i < recorded.length; i++) {
+        var prop = recorded[i];
+        if (prop && MOBILE_SUBMENU_LOCK_PROPS.indexOf(prop) !== -1) written.push(prop);
+      }
+      clearImportant(el, written);
+      el.removeAttribute('data-zappy-mobile-layout-lock');
+      el.removeAttribute('data-zappy-mobile-layout-lock-props');
+    });
   }
 
   function normalizeMobileSubmenuLayout() {
     var isMobile = window.matchMedia ? window.matchMedia('(max-width: 768px)').matches : window.innerWidth <= 768;
-    if (!isMobile) return;
+    if (!isMobile) {
+      clearMobileSubmenuLayoutLocks();
+      return;
+    }
     var isRtl = (document.documentElement.getAttribute('dir') || document.body.getAttribute('dir')) === 'rtl';
     document.querySelectorAll('.nav-menu li:has(> .sub-menu), nav li:has(> .sub-menu), .navbar li:has(> .sub-menu)').forEach(function(li) {
       var submenu = li.querySelector(':scope > .sub-menu');
@@ -5987,8 +6045,24 @@ function fixContrast(){
       setImportant(submenu, 'right', 'auto');
       setImportant(submenu, 'inset-inline-start', 'auto');
       setImportant(submenu, 'inset-inline-end', 'auto');
+      setImportant(submenu, 'position', 'static');
       if (submenu.classList.contains('mobile-expanded')) {
+        setImportant(submenu, 'display', 'block');
+        setImportant(submenu, 'visibility', 'visible');
+        setImportant(submenu, 'opacity', '1');
+        setImportant(submenu, 'height', 'auto');
+        setImportant(submenu, 'max-height', 'none');
+        setImportant(submenu, 'overflow', 'visible');
+        setImportant(submenu, 'pointer-events', 'auto');
         setImportant(submenu, 'padding', '8px 0');
+      } else {
+        setImportant(submenu, 'display', 'none');
+        setImportant(submenu, 'visibility', 'hidden');
+        setImportant(submenu, 'opacity', '0');
+        setImportant(submenu, 'height', '0');
+        setImportant(submenu, 'max-height', '0');
+        setImportant(submenu, 'overflow', 'hidden');
+        setImportant(submenu, 'pointer-events', 'none');
       }
 
       submenu.querySelectorAll('a, .menu-group-title').forEach(function(item) {
@@ -6085,12 +6159,12 @@ function fixContrast(){
   // declaration merging that was eating the standalone CSS injection.
   function ensureRuntimeCssInjected() {
     var existing = document.getElementById('zappy-ecom-routing-runtime-css');
-    if (existing && existing.getAttribute('data-v') === '31') return;
+    if (existing && existing.getAttribute('data-v') === '34') return;
     if (existing) existing.remove();
     var style = document.createElement('style');
     style.id = 'zappy-ecom-routing-runtime-css';
     style.setAttribute('data-zappy-runtime', 'ecom-routing');
-    style.setAttribute('data-v', '31');
+    style.setAttribute('data-v', '34');
     style.textContent =
       '@media (min-width: 769px){' +
         'html[dir="ltr"] .nav-container > .nav-brand,body[dir="ltr"] .nav-container > .nav-brand,html[dir="ltr"] .nav-right-group > .nav-brand,body[dir="ltr"] .nav-right-group > .nav-brand{order:-1!important}' +
@@ -6140,6 +6214,13 @@ function fixContrast(){
         '.zappy-products-dropdown>.sub-menu .zappy-nav-parent>a,.zappy-products-dropdown>.sub-menu .zappy-nav-parent>.menu-group-title{font-weight:700!important}' +
         '.zappy-products-dropdown>.sub-menu .zappy-nav-child>a,.zappy-products-dropdown>.sub-menu .zappy-nav-child>.menu-group-title{padding-left:36px!important;padding-right:16px!important;font-size:.94em!important;opacity:.85!important}' +
         'html[dir="rtl"] .zappy-products-dropdown>.sub-menu .zappy-nav-child>a,body[dir="rtl"] .zappy-products-dropdown>.sub-menu .zappy-nav-child>a,html[dir="rtl"] .zappy-products-dropdown>.sub-menu .zappy-nav-child>.menu-group-title,body[dir="rtl"] .zappy-products-dropdown>.sub-menu .zappy-nav-child>.menu-group-title{padding-left:16px!important;padding-right:36px!important}' +
+        '.navbar .nav-menu:not(.active):not(.open),nav.navbar .nav-menu:not(.active):not(.open),#navMenu:not(.active):not(.open){visibility:hidden!important;opacity:0!important;pointer-events:none!important}' +
+        '.navbar .nav-menu:not(.active):not(.open) *,nav.navbar .nav-menu:not(.active):not(.open) *,#navMenu:not(.active):not(.open) *{visibility:hidden!important;pointer-events:none!important}' +
+        '.navbar .nav-menu:not(.active):not(.open) .sub-menu,nav.navbar .nav-menu:not(.active):not(.open) .sub-menu,#navMenu:not(.active):not(.open) .sub-menu{display:none!important}' +
+        '#navMenu.active,#navMenu.open,.nav-menu.active,.nav-menu.open{display:flex!important;flex-direction:column!important;flex-wrap:nowrap!important;overflow-x:hidden!important;overflow-y:auto!important}' +
+        '#navMenu.active>li,#navMenu.open>li,.nav-menu.active>li,.nav-menu.open>li{position:static!important;width:100%!important;max-width:100%!important;flex:0 0 auto!important;top:auto!important;bottom:auto!important;left:auto!important;right:auto!important;inset:auto!important;transform:none!important}' +
+        '#navMenu .sub-menu,.nav-menu .sub-menu,.navbar .sub-menu,.zappy-products-dropdown>.sub-menu,.nav-menu .zappy-products-dropdown>.sub-menu,.nav-menu.active .zappy-products-dropdown>.sub-menu,.nav-menu.active .zappy-products-dropdown .sub-menu,#navMenu li:hover>.sub-menu,.nav-menu li:hover>.sub-menu,.navbar li:hover>.sub-menu,#navMenu li:focus-within>.sub-menu,.nav-menu li:focus-within>.sub-menu{display:none!important;visibility:hidden!important;opacity:0!important;height:0!important;max-height:0!important;overflow:hidden!important;pointer-events:none!important;position:static!important;transform:none!important}' +
+        '#navMenu .sub-menu.mobile-expanded,.nav-menu .sub-menu.mobile-expanded,.navbar .sub-menu.mobile-expanded,.zappy-products-dropdown>.sub-menu.mobile-expanded,.nav-menu.active .zappy-products-dropdown>.sub-menu.mobile-expanded,.nav-menu.active .zappy-products-dropdown .sub-menu.mobile-expanded,#navMenu li:hover>.sub-menu.mobile-expanded,#navMenu li:focus-within>.sub-menu.mobile-expanded,.nav-menu li:hover>.sub-menu.mobile-expanded,.nav-menu li:focus-within>.sub-menu.mobile-expanded,.navbar li:hover>.sub-menu.mobile-expanded,.navbar li:focus-within>.sub-menu.mobile-expanded{display:block!important;visibility:visible!important;opacity:1!important;height:auto!important;max-height:none!important;overflow:visible!important;pointer-events:auto!important;position:static!important;transform:none!important;width:100%!important;left:auto!important;right:auto!important;top:auto!important;float:none!important}' +
       '}';
     (document.head || document.documentElement).appendChild(style);
   }
@@ -7441,28 +7522,124 @@ if (document.readyState === 'complete') {
   } catch (e) {}
 })();
 
-/* ZAPPY_MOBILE_MENU_CLOSED_ICONS_V1 */
+/* ZAPPY_ANNOUNCEMENT_BAR_ROTATION_V4 */
 (function(){
-  if (window.__zappyMobileMenuClosedIconsV1) return;
-  window.__zappyMobileMenuClosedIconsV1 = true;
-  function reset() {
-    var toggle = document.querySelector('.mobile-toggle, #mobileToggle');
-    if (!toggle) return;
-    var menu = document.querySelector('#navMenu, .nav-menu, .navbar-menu');
-    var isOpen = !!(menu && (menu.classList.contains('active') || menu.classList.contains('open') || menu.style.display === 'block'));
-    if (isOpen) return;
-    toggle.classList.remove('active');
-    var hi = toggle.querySelector('.hamburger-icon');
-    var ci = toggle.querySelector('.close-icon');
-    if (hi) hi.style.setProperty('display', 'block', 'important');
-    if (ci) ci.style.setProperty('display', 'none', 'important');
+  if (window.__zappyAnnouncementBarRotationV4) return;
+  window.__zappyAnnouncementBarRotationV4 = true;
+  window.__zappyAnnouncementBarRotationV3 = true; // legacy guards
+  window.__zappyAnnouncementBarRotationV2 = true;
+
+  function readInterval(bar) {
+    var raw = bar && bar.getAttribute && bar.getAttribute('data-interval');
+    var ms = parseInt(raw, 10);
+    if (!isFinite(ms) || ms < 1000) ms = 4000;
+    return ms;
   }
+
+  function remountMessages(bar) {
+    // Neutralize orphaned anonymous setIntervals from pre-V2 inline fallbacks
+    // that never stored their timer id — their NodeList closures keep ticking
+    // on the OLD nodes after we replace them with clones.
+    if (!bar) return;
+    var stale = bar.querySelectorAll('.zappy-announcement-message');
+    for (var s = 0; s < stale.length; s++) {
+      var node = stale[s];
+      if (!node || !node.parentNode) continue;
+      node.parentNode.replaceChild(node.cloneNode(true), node);
+    }
+  }
+
+  function startRotation(bar, intervalMs, force) {
+    if (!bar) return;
+    var ms = isFinite(intervalMs) && intervalMs >= 1000 ? intervalMs : readInterval(bar);
+    var messages = bar.querySelectorAll('.zappy-announcement-message');
+    if (messages.length <= 1) {
+      if (window.__zappyAnnouncementRotateTimer) {
+        clearInterval(window.__zappyAnnouncementRotateTimer);
+        window.__zappyAnnouncementRotateTimer = null;
+      }
+      window.__zappyAnnouncementRotateBar = null;
+      window.__zappyAnnouncementRotateMs = null;
+      return;
+    }
+    // Already driving this bar at this interval — leave the active slide alone.
+    if (
+      !force &&
+      window.__zappyAnnouncementRotateTimer &&
+      window.__zappyAnnouncementRotateBar === bar &&
+      window.__zappyAnnouncementRotateMs === ms
+    ) {
+      return;
+    }
+    if (window.__zappyAnnouncementRotateTimer) {
+      clearInterval(window.__zappyAnnouncementRotateTimer);
+      window.__zappyAnnouncementRotateTimer = null;
+    }
+    remountMessages(bar);
+    messages = bar.querySelectorAll('.zappy-announcement-message');
+    if (messages.length <= 1) return;
+    var current = 0;
+    for (var i = 0; i < messages.length; i++) {
+      if (i === 0) messages[i].classList.add('active');
+      else messages[i].classList.remove('active');
+    }
+    window.__zappyAnnouncementRotateBar = bar;
+    window.__zappyAnnouncementRotateMs = ms;
+    window.__zappyAnnouncementRotateTimer = setInterval(function() {
+      var all = bar.querySelectorAll('.zappy-announcement-message');
+      if (!all || all.length <= 1) return;
+      if (current >= all.length) current = 0;
+      all[current].classList.remove('active');
+      current = (current + 1) % all.length;
+      all[current].classList.add('active');
+    }, ms);
+  }
+
+  // Shared entry point — pass force:true after rebuilding message nodes.
+  window.zappyStartAnnouncementRotation = startRotation;
+
+  function boot() {
+    if (document.body && document.body.classList.contains('zappy-focused-page')) return;
+    var bar = document.querySelector('.zappy-announcement-bar');
+    if (!bar) return;
+    startRotation(bar, readInterval(bar), false);
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', reset);
+    document.addEventListener('DOMContentLoaded', boot);
   } else {
-    reset();
+    boot();
   }
-  [50, 200, 500].forEach(function(ms){ setTimeout(reset, ms); });
+  // Settings fetch / dynamic bar create may land after first paint.
+  [300, 1000, 2500].forEach(function(ms){ setTimeout(boot, ms); });
+})();
+
+/* ZAPPY_MOBILE_MENU_CLOSED_ICONS_V2 */
+(function(){
+  if (window.__zappyMobileMenuClosedIconsV2) return;
+  window.__zappyMobileMenuClosedIconsV2 = true;
+  function closeBaked() {
+    var menu = document.querySelector('#navMenu, .nav-menu, .navbar-menu');
+    if (menu) {
+      menu.classList.remove('active');
+      menu.classList.remove('open');
+      menu.style.removeProperty('display');
+    }
+    var toggle = document.querySelector('.mobile-toggle, #mobileToggle');
+    if (toggle) {
+      toggle.classList.remove('active');
+      if (toggle.setAttribute) toggle.setAttribute('aria-expanded', 'false');
+      var hi = toggle.querySelector('.hamburger-icon');
+      var ci = toggle.querySelector('.close-icon');
+      if (hi) hi.style.setProperty('display', 'block', 'important');
+      if (ci) ci.style.setProperty('display', 'none', 'important');
+    }
+    document.body.style.overflow = '';
+  }
+  closeBaked();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', closeBaked, { once: true });
+  }
 })();
 
 
