@@ -230,6 +230,9 @@
   var ECOM_MODE = "";
   var IS_CATALOG = false;
   var IS_FULL = false;
+  var DIRECT_GA = false;
+  var DIRECT_META = false;
+  var GA_SEND_TO = "";
 
   var ECOM_ALIAS = {
     begin_checkout: 'checkout_started',
@@ -475,16 +478,18 @@
   }
   window.zappyFlushPendingMetaEvents = flushPendingMetaEvents;
 
-  var metaFlushAttempts = 0;
-  var metaFlushTimer = setInterval(function() {
-    metaFlushAttempts++;
-    flushPendingMetaEvents();
-    var pendingLen = 0;
-    try { pendingLen = (window.__zappyPendingMetaEvents || []).length; } catch (e) {}
-    if ((pendingLen === 0 && typeof window.fbq === 'function') || metaFlushAttempts > 60) {
-      clearInterval(metaFlushTimer);
-    }
-  }, 500);
+  if (DIRECT_META) {
+    var metaFlushAttempts = 0;
+    var metaFlushTimer = setInterval(function() {
+      metaFlushAttempts++;
+      flushPendingMetaEvents();
+      var pendingLen = 0;
+      try { pendingLen = (window.__zappyPendingMetaEvents || []).length; } catch (e) {}
+      if ((pendingLen === 0 && typeof window.fbq === 'function') || metaFlushAttempts > 60) {
+        clearInterval(metaFlushTimer);
+      }
+    }, 500);
+  }
 
   /**
    * Fire a marketing event to first-party analytics + GA4/GTM/Meta when present.
@@ -524,7 +529,9 @@
         } catch (e1) {}
       }
 
-      // GTM / dataLayer — platform-standard ecommerce event names
+      // GTM / dataLayer — platform-standard ecommerce event names.
+      // Always push. A bare gtag.js snippet ignores plain event objects;
+      // a GTM container is what turns them into GA4/Ads hits.
       if (!purchaseAlreadySent) {
         try {
           window.dataLayer = window.dataLayer || [];
@@ -535,9 +542,12 @@
             if (ga4ForGtm.value != null) ecommerce.value = ga4ForGtm.value;
             if (ga4ForGtm.currency) ecommerce.currency = ga4ForGtm.currency;
             if (ga4ForGtm.items) ecommerce.items = ga4ForGtm.items;
+            // Clear first so GTM does not merge this hit with the previous ecommerce object.
+            window.dataLayer.push({ ecommerce: null });
             window.dataLayer.push({ event: plat.gtm, ecommerce: ecommerce });
             // Secondary Zappy-specific trigger for merchants who want it
             if (eventId === 'checkout_complete' || eventId === 'checkout_started') {
+              window.dataLayer.push({ ecommerce: null });
               window.dataLayer.push({ event: eventId, ecommerce: ecommerce });
             }
           } else {
@@ -549,31 +559,49 @@
           }
         } catch (e2) {}
 
-        // GA4 gtag
-        try {
-          if (typeof window.gtag === 'function') {
-            window.gtag('event', plat.ga4, buildGa4Params(eventId, metadata));
-          }
-        } catch (e3) {}
+        // Direct Google Analytics snippet only. GTM also defines window.gtag;
+        // calling it then sends the same event again to every Google tag the
+        // container loaded. send_to keeps a direct GA install off those tags
+        // when the merchant also has GTM.
+        if (DIRECT_GA) {
+          try {
+            if (typeof window.gtag === 'function') {
+              var gaParams = buildGa4Params(eventId, metadata);
+              if (GA_SEND_TO && gaParams && typeof gaParams === 'object') {
+                var gaCopy = {};
+                for (var gk in gaParams) {
+                  if (Object.prototype.hasOwnProperty.call(gaParams, gk)) gaCopy[gk] = gaParams[gk];
+                }
+                gaCopy.send_to = GA_SEND_TO;
+                gaParams = gaCopy;
+              }
+              window.gtag('event', plat.ga4, gaParams);
+            }
+          } catch (e3) {}
+        }
 
         if (oid) markPurchaseFired(oid);
       }
 
-      // Meta Pixel — live sites lazy-load fbq after marketing consent. If the
-      // stub is not defined yet, queue and flush when the pixel arrives.
-      try {
-        if (purchaseMetaAlreadySent) {
-          // already delivered to Meta
-        } else {
-          var metaParams = buildMetaParams(eventId, metadata);
-          if (typeof window.fbq === 'function') {
-            window.fbq('track', plat.meta, metaParams);
-            if (oid) markPurchaseMetaFired(oid);
+      // Meta Pixel — only the Zappy pixel integration. A pixel pasted inside
+      // GTM already initializes fbq; calling it from here would double-count.
+      // Live sites lazy-load fbq after marketing consent. If the stub is not
+      // defined yet, queue and flush when the pixel arrives.
+      if (DIRECT_META) {
+        try {
+          if (purchaseMetaAlreadySent) {
+            // already delivered to Meta
           } else {
-            enqueueMetaEvent(plat.meta, metaParams, eventId === 'checkout_complete' ? oid : null);
+            var metaParams = buildMetaParams(eventId, metadata);
+            if (typeof window.fbq === 'function') {
+              window.fbq('track', plat.meta, metaParams);
+              if (oid) markPurchaseMetaFired(oid);
+            } else {
+              enqueueMetaEvent(plat.meta, metaParams, eventId === 'checkout_complete' ? oid : null);
+            }
           }
-        }
-      } catch (e4) {}
+        } catch (e4) {}
+      }
     } catch (err) {}
   };
 
@@ -792,7 +820,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
       }
       @media (min-width: 769px) { .mobile-submenu-toggle { display: none !important; } }
     </style>
-<style data-zappy-image-carousel-css="true">[data-zappy-image-carousel]{position:relative;overflow:hidden}.zappy-carousel-hero[data-zappy-image-carousel]{position:absolute;inset:0;z-index:0}[data-zappy-image-carousel]>.zappy-carousel-slide{position:absolute;inset:0;opacity:0;transition:opacity 1s ease-in-out;pointer-events:none;z-index:0}[data-zappy-image-carousel]>.zappy-carousel-slide.is-active{opacity:1;pointer-events:auto;z-index:1}[data-zappy-image-carousel]>.zappy-carousel-slide img{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important;max-width:none!important;max-height:none!important;margin:0!important}[data-zappy-image-carousel]>.zappy-carousel-slide img:not([data-zappy-carousel-image-ready="true"]){opacity:0!important}[data-zappy-image-carousel]>.zappy-carousel-slide img[data-zappy-carousel-image-ready="true"]{opacity:1!important;transition:opacity .15s ease}@media(scripting:none){[data-zappy-image-carousel]>.zappy-carousel-slide img{opacity:1!important}}.zappy-carousel-hero[data-zappy-image-carousel]>.zappy-carousel-slide img{position:absolute!important;top:0!important;left:0!important}[data-zappy-image-carousel] .zappy-carousel-slide-link{position:absolute;inset:0;display:block;z-index:2;background:transparent}.zappy-hero-link-overlay{position:absolute;inset:0;display:block;z-index:1;background:transparent}body.zappy-edit-mode .zappy-hero-link-overlay,body.zappy-edit-mode [data-zappy-image-carousel] .zappy-carousel-slide-link,body.zappy-image-edit-mode .zappy-hero-link-overlay,body.zappy-image-edit-mode [data-zappy-image-carousel] .zappy-carousel-slide-link{pointer-events:none!important}</style>
+<style data-zappy-image-carousel-css="true">[data-zappy-image-carousel]{position:relative;overflow:hidden}.zappy-carousel-hero[data-zappy-image-carousel]{position:absolute;inset:0;z-index:0}[data-zappy-image-carousel]>.zappy-carousel-slide{position:absolute;inset:0;opacity:0;transition:opacity 1s ease-in-out;pointer-events:none;z-index:0}[data-zappy-image-carousel]>.zappy-carousel-slide.is-active{opacity:1;pointer-events:auto;z-index:1}[data-zappy-image-carousel]>.zappy-carousel-slide img{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important;max-width:none!important;max-height:none!important;margin:0!important}[data-zappy-image-carousel]>.zappy-carousel-slide img:not([data-zappy-carousel-image-ready="true"]){opacity:0!important}[data-zappy-image-carousel]>.zappy-carousel-slide img[data-zappy-carousel-image-ready="true"]{opacity:1!important;transition:opacity .15s ease}@media(scripting:none){[data-zappy-image-carousel]>.zappy-carousel-slide img{opacity:1!important}}.zappy-carousel-hero[data-zappy-image-carousel]>.zappy-carousel-slide img{position:absolute!important;top:0!important;left:0!important}.zappy-carousel-hero[data-zappy-image-carousel]>.zappy-carousel-slide [data-zappy-zoom-wrapper="true"]{position:absolute!important;top:0!important;left:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;overflow:hidden!important}[data-zappy-image-carousel] .zappy-carousel-slide-link{position:absolute;inset:0;display:block;z-index:2;background:transparent}.zappy-hero-link-overlay{position:absolute;inset:0;display:block;z-index:1;background:transparent}body.zappy-edit-mode .zappy-hero-link-overlay,body.zappy-edit-mode [data-zappy-image-carousel] .zappy-carousel-slide-link,body.zappy-image-edit-mode .zappy-hero-link-overlay,body.zappy-image-edit-mode [data-zappy-image-carousel] .zappy-carousel-slide-link{pointer-events:none!important}</style>
     <style id="zappy-widget-visibility">
       html[dir="rtl"] .whatsapp-float { right: 20px !important; left: auto !important; }
       html[dir="ltr"] .whatsapp-float, html:not([dir]) .whatsapp-float { left: 20px !important; right: auto !important; }
@@ -1372,7 +1400,7 @@ body:has(.zappy-announcement-bar) .navbar:not(.zappy-catalog-menu):not(.mobile-s
       </div>
       <div class="trust-item">
         <i class="fas fa-map-marker-alt" data-element-type="icon" data-element-id="icon-1784762321852-eokzlodo3" data-icon-type="fontawesome"></i>
-        <span>7 אדמונד סחייק, ירושלים, 93133, ישראל</span>
+        <span style="">אדמונד סחייק 7, ירושלים, 93133, ישראל</span>
       </div>
       <div class="trust-item">
         <i class="fas fa-clock" data-element-type="icon" data-element-id="icon-1784762321852-u0x2gnrnt" data-icon-type="fontawesome"></i>
